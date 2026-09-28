@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：居中猫咪脸 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.7"
+        android:scaleY="0.7"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- 耳朵 -->
+        <path
+            android:fillColor="#FFF3E0"
+            android:pathData="M36,40 L48,30 L46,44 Z" />
+        <path
+            android:fillColor="#FFF3E0"
+            android:pathData="M72,40 L60,30 L62,44 Z" />
+        <!-- 猫头 -->
+        <path
+            android:fillColor="#FFF3E0"
+            android:pathData="M54,28 C36,28 23,41 23,59 L23,68 C23,76 29,82 37,82 L71,82 C79,82 85,76 85,68 L85,59 C85,41 72,28 54,28 Z" />
+        <!-- 眼睛 -->
+        <path
+            android:fillColor="#5D4037"
+            android:pathData="M41,54 C43,51 48,51 50,54 C48,57 43,57 41,54 Z" />
+        <path
+            android:fillColor="#5D4037"
+            android:pathData="M58,54 C60,51 65,51 67,54 C65,57 60,57 58,54 Z" />
+        <!-- 嘴 -->
+        <path
+            android:fillColor="#D81B60"
+            android:pathData="M50,68 L54,72 L58,68 L56,73 L52,73 Z" />
+    </group>
+</vector>

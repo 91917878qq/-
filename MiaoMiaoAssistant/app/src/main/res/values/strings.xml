@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">喵喵助手</string>
+    <string name="version_name">0.0.1</string>
+    <string name="developer_name">91917878qq</string>
+    <string name="feedback_email">15823489055@163.com</string>
+
+    <!-- 无障碍服务说明（系统设置里展示给用户） -->
+    <string name="accessibility_service_description">喵喵助手无障碍服务：在你选定的聊天应用输入框中，自动把输入文本替换为猫娘语气。本服务仅在你输入文字时读取并改写输入框内容，不会采集任何隐私数据。</string>
+
+    <string name="floating_notification_title">喵喵助手悬浮窗运行中</string>
+    <string name="floating_notification_text">点击悬浮窗可快速切换替换开关、打开主界面</string>
+
+    <string name="channel_floating">悬浮窗服务</string>
+    <string name="channel_default">常规通知</string>
+</resources>
