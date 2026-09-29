@@ -35,13 +35,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.miaomiao.assistant.core.Haptics
 import com.miaomiao.assistant.ui.theme.LiquidGlassConfig
 import com.miaomiao.assistant.ui.theme.LiquidGlassSurface
-import com.miaomiao.assistant.util.VibrationHelper
 
 /** 液态玻璃配置的 CompositionLocal，由主界面按设置注入。 */
 val LocalLiquidGlass = staticCompositionLocalOf { LiquidGlassConfig() }
@@ -55,34 +54,34 @@ fun ProvideLiquidGlass(config: LiquidGlassConfig, content: @Composable () -> Uni
 /**
  * 拟真触感封装：在 Compose 的 [HapticFeedback] 基础上叠加真实硬件震动。
  *
- * [tap] 同时触发一次 `TextHandleMove`，模拟物理按键的阻尼反馈。
+ * [enabled] 由 `state.settings.hapticEnabled` 决定；底层震动统一委托给
+ * [Haptics]，实际是否触发仍受 core.Haptics 内部分流控制。
  */
 class MiaoHaptics(
     private val haptic: HapticFeedback,
-    private val vibrator: VibrationHelper,
     private val enabled: Boolean,
 ) {
     fun tap() {
         if (!enabled) return
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        vibrator.vibrate(VibrationHelper.Intensity.LIGHT)
+        Haptics.tap()
     }
 
     fun medium() {
         if (!enabled) return
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        vibrator.vibrate(VibrationHelper.Intensity.MEDIUM)
+        Haptics.toggle()
     }
 
     fun heavy() {
         if (!enabled) return
-        vibrator.vibrate(VibrationHelper.Intensity.HEAVY)
+        Haptics.success()
     }
 
     fun rebound() {
         if (!enabled) return
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        vibrator.rebound()
+        Haptics.snap()
     }
 }
 
@@ -90,9 +89,7 @@ class MiaoHaptics(
 @Composable
 fun rememberMiaoHaptics(enabled: Boolean): MiaoHaptics {
     val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
-    val vibrator = remember(context) { VibrationHelper(context) }
-    return remember(haptic, vibrator, enabled) { MiaoHaptics(haptic, vibrator, enabled) }
+    return remember(haptic, enabled) { MiaoHaptics(haptic, enabled) }
 }
 
 /**

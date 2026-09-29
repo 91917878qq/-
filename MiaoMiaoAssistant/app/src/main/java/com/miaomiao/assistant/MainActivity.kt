@@ -8,34 +8,32 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.NotificationManagerCompat
 import androidx.compose.runtime.getValue
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.miaomiao.assistant.ui.MainViewModel
+import com.miaomiao.assistant.core.Prefs
 import com.miaomiao.assistant.ui.MainScreen
+import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.theme.MiaoMiaoTheme
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
-/** 应用唯一 Activity，承载 Compose 主界面。 */
+/** 应用唯一 Activity：承载 Compose 主界面，处理运行时权限与“隐藏后台”保护。 */
 class MainActivity : ComponentActivity() {
 
-    private var settingsJob: Job? = null
+    private var hideRecentsListener: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         requestNotificationPermissionIfNeeded()
+        applyHideBackground(Prefs.hideRecents)
 
         setContent {
             val viewModel: MainViewModel = viewModel()
             val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-            MiaoMiaoTheme(dynamicColor = state.settings.dynamicColor) {
+            MiaoMiaoTheme(themeMode = state.settings.themeMode) {
                 MainScreen(viewModel = viewModel, state = state)
             }
         }
@@ -43,21 +41,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // 持续跟随“隐藏后台”设置：加锁屏安全保护并隐藏最近任务卡片
-        settingsJob = lifecycleScope.launch {
-            (application as MiaoApplication).container.settingsRepository.settings
-                .collectLatest { applyHideBackground(it.hideBackground) }
+        // 持续跟随“隐藏后台”设置：FLAG_SECURE 阻止截屏与最近任务预览
+        hideRecentsListener = Prefs.registerGlobalListener { _, key ->
+            if (key == Prefs.KEY_HIDE_RECENTS) applyHideBackground(Prefs.hideRecents)
         }
     }
 
     override fun onStop() {
-        settingsJob?.cancel()
-        settingsJob = null
+        hideRecentsListener?.invoke()
+        hideRecentsListener = null
         super.onStop()
     }
 
     private fun applyHideBackground(enabled: Boolean) {
-        // FLAG_SECURE：禁止截屏与最近任务预览（“隐藏后台”的核心保护能力）
         if (enabled) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -65,13 +61,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Android 13+ 在首次启动时请求通知权限，保证悬浮窗前台服务通知可展示。 */
+    /** Android 13+ 首次启动请求通知权限，保证前台服务通知可展示。 */
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (NotificationManagerCompat.from(this).areNotificationsEnabled()) return
         val launcher = registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
-        ) { /* 用户在系统页也可手动开启，这里不强制处理结果 */ }
+        ) { /* 用户也可在系统设置里手动开启，这里不强制处理结果 */ }
         launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }

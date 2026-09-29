@@ -2,177 +2,404 @@ package com.miaomiao.assistant.ui
 
 import android.app.Application
 import android.content.Intent
+import android.graphics.drawable.Drawable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.miaomiao.assistant.MiaoApplication
-import com.miaomiao.assistant.data.model.AppInfo
-import com.miaomiao.assistant.data.model.ReplacementRule
-import com.miaomiao.assistant.data.model.TriggerMode
-import com.miaomiao.assistant.data.repository.PresetRepository
-import com.miaomiao.assistant.service.FloatingWindowService
+import com.miaomiao.assistant.core.Haptics
+import com.miaomiao.assistant.core.Logger
+import com.miaomiao.assistant.core.Prefs
+import com.miaomiao.assistant.core.Rule
+import com.miaomiao.assistant.core.RulePreset
+import com.miaomiao.assistant.core.ShareCode
+import com.miaomiao.assistant.service.MiaoOverlayService
 import com.miaomiao.assistant.util.AccessibilityHelper
+import com.miaomiao.assistant.util.SystemSettingsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** 已安装的可选生效应用。 */
+data class InstalledApp(
+    val packageName: String,
+    val label: String,
+    val icon: Drawable?,
+)
 
 /**
  * 主界面 ViewModel（MVVM）。
  *
- * 聚合 [SettingsRepository][com.miaomiao.assistant.data.repository.SettingsRepository]
- * 与 [PresetRepository] 的数据流，向 Compose 暴露单一 [MiaoUiState]，
- * 并提供设置、规则、预设、应用列表等全部业务操作。
+ * 一次性读取 [Prefs] 全部字段构建 [SettingsSnapshot]，并注册全局监听器，
+ * 任何配置变化都会重建快照并推送到 [uiState]，界面因此自动刷新。
+ * 所有设置写操作直接写 Prefs，无需 Repository 中转。
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val container = (application as MiaoApplication).container
-    private val settingsRepository = container.settingsRepository
-    private val presetRepository = container.presetRepository
-    private val ruleRepository = container.ruleRepository
 
     private val _message = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val message = _message.asSharedFlow()
 
-    private val _installedApps = MutableStateFlow<List<AppInfo>>(emptyList())
-    val installedApps: StateFlow<List<AppInfo>> = _installedApps.asStateFlow()
+    private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
+    val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
 
     private val _appsLoading = MutableStateFlow(false)
     val appsLoading: StateFlow<Boolean> = _appsLoading.asStateFlow()
 
-    val uiState: StateFlow<MiaoUiState> = combine(
-        settingsRepository.settings,
-        presetRepository.presets,
-    ) { settings, presets ->
-        MiaoUiState(settings = settings, presets = presets, isLoading = false)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = MiaoUiState(),
-    )
+    private val _uiState = MutableStateFlow(MiaoUiState())
+    val uiState: StateFlow<MiaoUiState> = _uiState.asStateFlow()
 
-    // ---------------- 设置项 ----------------
+    private var unregisterListener: (() -> Unit)? = null
 
-    fun setMasterEnabled(value: Boolean) = launch { settingsRepository.setMasterEnabled(value) }
-
-    fun setRandomEnabled(value: Boolean) = launch { settingsRepository.setRandomEnabled(value) }
-
-    fun setTriggerMode(value: TriggerMode) = launch { settingsRepository.setTriggerMode(value) }
-
-    fun setReplaceDelay(value: Long) = launch { settingsRepository.setReplaceDelay(value) }
-
-    fun setSelectedPackages(value: Set<String>) = launch {
-        settingsRepository.setSelectedPackages(value)
+    init {
+        _uiState.value = MiaoUiState(snapshotSettings())
+        // 全局监听：任何键变化都重建状态快照
+        unregisterListener = Prefs.registerGlobalListener { _, _ ->
+            _uiState.value = MiaoUiState(snapshotSettings())
+        }
     }
 
-    fun setLiquidGlass(value: Boolean) = launch { settingsRepository.setLiquidGlass(value) }
+    override fun onCleared() {
+        unregisterListener?.invoke()
+        unregisterListener = null
+        super.onCleared()
+    }
 
-    fun setBlurRadius(value: Int) = launch { settingsRepository.setBlurRadius(value) }
+    // ---------------- 快照 ----------------
 
-    fun setDynamicColor(value: Boolean) = launch { settingsRepository.setDynamicColor(value) }
+    private fun snapshotSettings(): SettingsSnapshot = SettingsSnapshot(
+        serviceEnabled = Prefs.serviceEnabled,
+        selectedApps = Prefs.selectedApps,
+        realtimeEnabled = Prefs.realtimeEnabled,
+        punctuationEnabled = Prefs.punctuationEnabled,
+        preOverlayTrigger = Prefs.preOverlayTrigger,
+        overlayEnabled = Prefs.overlayEnabled,
+        overlayAppendText = Prefs.overlayAppendText,
+        overlayOpacity = Prefs.overlayOpacity,
+        overlaySize = Prefs.overlaySize,
+        overlayShowIcon = Prefs.overlayShowIcon,
+        overlayAutoSnap = Prefs.overlayAutoSnap,
+        rules = Prefs.rules,
+        randomReplace = Prefs.randomReplace,
+        smartJudgment = Prefs.smartJudgment,
+        bracketProtect = Prefs.bracketProtect,
+        presets = Prefs.presets,
+        activePreset = Prefs.activePreset,
+        emoticonEnabled = Prefs.emoticonEnabled,
+        emoticonInterval = Prefs.emoticonInterval,
+        emoticonCustom = Prefs.emoticonCustom,
+        emoticonSpaceBefore = Prefs.emoticonSpaceBefore,
+        qqCatPaw = Prefs.qqCatPaw,
+        delayEnabled = Prefs.delayEnabled,
+        delayMs = Prefs.delayMs,
+        hapticEnabled = Prefs.hapticEnabled,
+        themeMode = Prefs.themeMode,
+        glassEffectEnabled = Prefs.glassEffectEnabled,
+        glassBlurLevel = Prefs.glassBlurLevel,
+        hideRecents = Prefs.hideRecents,
+        hasVibrator = Haptics.hasVibrator(),
+    )
 
-    fun setHideBackground(value: Boolean) = launch { settingsRepository.setHideBackground(value) }
+    // ---------------- 首页 ----------------
 
-    fun setHapticEnabled(value: Boolean) = launch { settingsRepository.setHapticEnabled(value) }
+    fun setServiceEnabled(value: Boolean) {
+        Prefs.serviceEnabled = value
+        if (value && !AccessibilityHelper.isAccessibilityServiceEnabled(getApplication())) {
+            emitMessage("请先开启无障碍服务，否则自动改写不会生效")
+        }
+    }
+
+    fun setSelectedApps(value: Set<String>) = Prefs.setSelectedApps(value)
+
+    fun switchAccessibility() {
+        SystemSettingsNavigator.openAccessibilitySettings(getApplication())
+    }
+
+    // ---------------- 触发方式 ----------------
+
+    /** 实时改写：写入实时触发，并清除其他模式。 */
+    fun setRealtimeTriggerMode() {
+        Prefs.realtimeEnabled = true
+        Prefs.punctuationEnabled = false
+        Prefs.preOverlayTrigger = Prefs.TRIGGER_NONE
+    }
+
+    /** 标点触发：写入标点触发，并清除其他模式。 */
+    fun setPunctuationTriggerMode() {
+        Prefs.realtimeEnabled = false
+        Prefs.punctuationEnabled = true
+        Prefs.preOverlayTrigger = Prefs.TRIGGER_NONE
+    }
+
+    /** 手动处理悬浮窗：仅保留悬浮窗手动处理。 */
+    fun setManualTriggerMode() {
+        Prefs.realtimeEnabled = false
+        Prefs.punctuationEnabled = false
+        Prefs.preOverlayTrigger = Prefs.TRIGGER_NONE
+    }
+
+    // ---------------- 悬浮窗 ----------------
 
     /** 切换悬浮窗开关，并同步启动/停止前台服务。 */
-    fun setFloatingEnabled(value: Boolean) = launch {
-        settingsRepository.setFloatingEnabled(value)
+    fun toggleOverlay(value: Boolean) {
+        Prefs.overlayEnabled = value
         val context = getApplication<Application>()
         if (value) {
             if (AccessibilityHelper.canDrawOverlays(context)) {
-                FloatingWindowService.start(context)
+                MiaoOverlayService.start(context)
             } else {
                 emitMessage("请先授予悬浮窗权限")
             }
         } else {
-            FloatingWindowService.stop(context)
+            MiaoOverlayService.stop(context)
         }
     }
 
-    // ---------------- 规则 ----------------
-
-    fun saveRule(rule: ReplacementRule) = launch {
-        if (rule.id == 0L) ruleRepository.addRule(rule) else ruleRepository.updateRule(rule)
-        emitMessage("规则已保存")
+    fun setOverlayAppendText(value: String) {
+        Prefs.overlayAppendText = value
     }
 
-    fun deleteRule(ruleId: Long) = launch { ruleRepository.deleteRule(ruleId) }
+    fun setOverlayOpacity(value: Float) {
+        Prefs.overlayOpacity = value
+    }
 
-    fun clearRules() = launch {
-        ruleRepository.clearRules()
+    fun setOverlaySize(value: Float) {
+        Prefs.overlaySize = value
+    }
+
+    fun setOverlayShowIcon(value: Boolean) {
+        Prefs.overlayShowIcon = value
+    }
+
+    fun setOverlayAutoSnap(value: Boolean) {
+        Prefs.overlayAutoSnap = value
+    }
+
+    // ---------------- 替换规则 ----------------
+
+    /** 保存规则：空 from 或超上限时返回提示消息，成功返回空串。 */
+    fun saveRule(from: String, to: String): String {
+        if (from.isBlank()) {
+            emitMessage("被替换内容不能为空")
+            return "被替换内容不能为空"
+        }
+        if (Prefs.rules.size >= Rule.MAX_RULES) {
+            emitMessage("规则数量已达上限（${Rule.MAX_RULES} 条）")
+            return "规则数量已达上限"
+        }
+        Prefs.rules = Prefs.rules + Rule(from = from, to = to)
+        emitMessage("规则已添加")
+        return ""
+    }
+
+    fun deleteRule(from: String, to: String) {
+        Prefs.rules = Prefs.rules.filterNot { it.from == from && it.to == to }
+        emitMessage("规则已删除")
+    }
+
+    fun clearRules() {
+        Prefs.rules = emptyList()
         emitMessage("规则列表已清空")
     }
 
-    // ---------------- 预设 ----------------
+    fun resetDefaultRules() {
+        Prefs.rules = Rule.DEFAULT_RULES
+        emitMessage("已恢复默认规则")
+    }
 
-    fun addPreset(name: String) = launch {
-        val created = presetRepository.addPreset(name)
-        if (created == null) {
-            emitMessage("最多只能有 ${com.miaomiao.assistant.data.model.Preset.MAX_PRESETS} 套预设")
-        } else {
-            settingsRepository.setActivePresetId(created.id)
-            emitMessage("已创建预设「${created.name}」")
+    fun setRandomReplace(value: Boolean) {
+        Prefs.randomReplace = value
+    }
+
+    fun setSmartJudgment(value: Boolean) {
+        Prefs.smartJudgment = value
+    }
+
+    fun setBracketProtect(value: Boolean) {
+        Prefs.bracketProtect = value
+    }
+
+    // ---------------- 规则预设 ----------------
+
+    fun switchRulePreset(name: String) {
+        val preset = Prefs.presets.firstOrNull { it.name == name } ?: return
+        Prefs.rules = preset.rules
+        Prefs.activePreset = name
+        emitMessage("已切换到预设「$name」")
+    }
+
+    fun createPreset(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) {
+            emitMessage("预设名称不能为空")
+            return
         }
-    }
-
-    fun deletePreset(id: Long) = launch {
-        presetRepository.deletePreset(id)
-        emitMessage("预设已删除")
-    }
-
-    fun renamePreset(id: Long, name: String) = launch { presetRepository.renamePreset(id, name) }
-
-    fun setActivePreset(id: Long) = launch { settingsRepository.setActivePresetId(id) }
-
-    /** 导入分享码，自动保存为新预设。 */
-    fun importShareCode(code: String) = launch {
-        when (val result = presetRepository.importFromShareCode(code)) {
-            is PresetRepository.ImportResult.Success -> {
-                settingsRepository.setActivePresetId(result.preset.id)
-                emitMessage("导入成功：${result.preset.name}")
-            }
-
-            PresetRepository.ImportResult.InvalidCode -> emitMessage("分享码无效")
-            PresetRepository.ImportResult.LimitReached ->
-                emitMessage("已达 30 套预设上限，请先删除旧预设")
+        if (Prefs.presets.any { it.name == trimmed }) {
+            emitMessage("已存在同名预设")
+            return
         }
+        if (Prefs.presets.size >= RulePreset.MAX_PRESETS) {
+            emitMessage("已达 ${RulePreset.MAX_PRESETS} 套预设上限")
+            return
+        }
+        Prefs.presets = Prefs.presets + RulePreset(name = trimmed, rules = Prefs.rules)
+        Prefs.activePreset = trimmed
+        emitMessage("已创建预设「$trimmed」")
     }
 
-    /** 生成当前预设的分享码。 */
-    suspend fun exportShareCode(): String? =
-        uiState.value.activePreset?.let { presetRepository.exportShareCode(it) }
+    fun deletePreset(name: String) {
+        val remaining = Prefs.presets.filterNot { it.name == name }
+        if (remaining.size == Prefs.presets.size) return
+        Prefs.presets = remaining
+        if (Prefs.activePreset == name) {
+            Prefs.activePreset = remaining.firstOrNull()?.name ?: ""
+        }
+        emitMessage("预设「$name」已删除")
+    }
+
+    fun renamePreset(name: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) {
+            emitMessage("预设名称不能为空")
+            return
+        }
+        if (Prefs.presets.any { it.name == trimmed }) {
+            emitMessage("已存在同名预设")
+            return
+        }
+        Prefs.presets = Prefs.presets.map { if (it.name == name) it.copy(name = trimmed) else it }
+        if (Prefs.activePreset == name) Prefs.activePreset = trimmed
+        emitMessage("预设已重命名")
+    }
+
+    /** 导入分享码，自动保存为新预设；返回消息（成功为空串）。 */
+    fun importShareCode(code: String): String {
+        val rules = ShareCode.decode(code)
+        if (rules.isNullOrEmpty()) {
+            emitMessage("分享码无效")
+            return "分享码无效"
+        }
+        if (Prefs.presets.size >= RulePreset.MAX_PRESETS) {
+            emitMessage("已达 ${RulePreset.MAX_PRESETS} 套预设上限，请先删除旧预设")
+            return "已达预设上限"
+        }
+        var name = "导入预设"
+        var index = 2
+        while (Prefs.presets.any { it.name == name }) {
+            name = "导入预设 $index"
+            index++
+        }
+        Prefs.presets = Prefs.presets + RulePreset(name = name, rules = rules)
+        Prefs.rules = rules
+        Prefs.activePreset = name
+        emitMessage("导入成功：$name")
+        return ""
+    }
+
+    /** 生成当前预设的分享码；无可导出规则时返回 null。 */
+    fun exportShareCode(): String? {
+        val rules = Prefs.activePreset.takeIf { it.isNotBlank() }
+            ?.let { name -> Prefs.presets.firstOrNull { p -> p.name == name }?.rules }
+            ?: Prefs.rules
+        if (rules.isEmpty()) {
+            emitMessage("当前预设没有可导出的规则")
+            return null
+        }
+        return ShareCode.encode(rules)
+    }
+
+    // ---------------- 颜文字 ----------------
+
+    fun setEmoticonEnabled(value: Boolean) {
+        Prefs.emoticonEnabled = value
+    }
+
+    fun setEmoticonInterval(value: Int) {
+        Prefs.emoticonInterval = value
+    }
+
+    fun setEmoticonCustom(value: String) {
+        Prefs.emoticonCustom = value
+    }
+
+    fun setEmoticonSpaceBefore(value: Boolean) {
+        Prefs.emoticonSpaceBefore = value
+    }
+
+    fun setQqCatPaw(value: Boolean) {
+        Prefs.qqCatPaw = value
+    }
+
+    // ---------------- 处理延迟 ----------------
+
+    fun setDelayEnabled(value: Boolean) {
+        Prefs.delayEnabled = value
+    }
+
+    fun setDelayMs(value: Long) {
+        Prefs.delayMs = value
+    }
+
+    // ---------------- 工具 / 外观 ----------------
+
+    fun setHapticEnabled(value: Boolean) {
+        Prefs.hapticEnabled = value
+    }
+
+    fun setThemeMode(value: String) {
+        Prefs.themeMode = value
+    }
+
+    fun setGlassEffectEnabled(value: Boolean) {
+        Prefs.glassEffectEnabled = value
+    }
+
+    fun setGlassBlurLevel(value: Int) {
+        Prefs.glassBlurLevel = value
+    }
+
+    fun setHideRecents(value: Boolean) {
+        Prefs.hideRecents = value
+    }
+
+    // ---------------- 日志 ----------------
+
+    fun exportLogs(): String = Logger.export(getApplication())
+
+    fun crashFiles(): List<String> = Logger.crashFiles()
+
+    fun clearLogs() {
+        Logger.clearAll()
+        Prefs.pendingCrash = false
+        emitMessage("日志已清理")
+    }
 
     // ---------------- 应用列表 ----------------
 
     fun loadInstalledApps() {
         if (_appsLoading.value) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             _appsLoading.value = true
-            val apps = queryInstalledApps()
+            val apps = withContext(Dispatchers.IO) { queryInstalledApps() }
             _installedApps.value = apps
             _appsLoading.value = false
         }
     }
 
-    private suspend fun queryInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+    private fun queryInstalledApps(): List<InstalledApp> {
         val context = getApplication<Application>()
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
         val resolved = pm.queryIntentActivities(intent, 0)
-        resolved.asSequence()
+        return resolved.asSequence()
             .map { it.activityInfo.applicationInfo }
             .distinctBy { it.packageName }
             .filter { it.packageName != context.packageName }
             .map {
-                AppInfo(
+                InstalledApp(
                     packageName = it.packageName,
                     label = it.loadLabel(pm).toString(),
                     icon = runCatching { it.loadIcon(pm) }.getOrNull(),
@@ -184,11 +411,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---------------- 内部工具 ----------------
 
-    private fun launch(block: suspend () -> Unit) {
-        viewModelScope.launch { block() }
-    }
-
-    private fun emitMessage(text: String) {
+    /** 发送 Snackbar 消息（MainScreen 收集 [message] 展示）。 */
+    fun emitMessage(text: String) {
         _message.tryEmit(text)
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -54,6 +55,13 @@ private val tabs = listOf(
     MiaoTab("about", "关于", Icons.Filled.Info),
 )
 
+/** 玻璃模糊等级 → 液态玻璃模糊半径。 */
+private fun glassBlurRadius(level: Int): Dp = when (level) {
+    0 -> 10.dp
+    1 -> 24.dp
+    else -> 48.dp
+}
+
 /** 应用主界面：底部导航 + 导航图。 */
 @Composable
 fun MainScreen(viewModel: MainViewModel, state: MiaoUiState) {
@@ -67,8 +75,8 @@ fun MainScreen(viewModel: MainViewModel, state: MiaoUiState) {
 
     ProvideLiquidGlass(
         LiquidGlassConfig(
-            enabled = state.settings.liquidGlass,
-            blurRadius = state.settings.blurRadiusDp.dp,
+            enabled = state.settings.glassEffectEnabled,
+            blurRadius = glassBlurRadius(state.settings.glassBlurLevel),
         ),
     ) {
         Box(
@@ -88,7 +96,9 @@ fun MainScreen(viewModel: MainViewModel, state: MiaoUiState) {
                     startDestination = "home",
                     modifier = Modifier.padding(padding),
                 ) {
-                    composable("home") { HomeScreen(state, viewModel, haptics) }
+                    composable("home") {
+                        HomeScreen(state, viewModel, haptics) { navController.navigate("apps") }
+                    }
                     composable("config") {
                         ConfigScreen(state, viewModel, haptics) { navController.navigate("rules") }
                     }

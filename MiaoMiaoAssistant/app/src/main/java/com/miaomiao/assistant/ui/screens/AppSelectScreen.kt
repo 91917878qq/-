@@ -1,5 +1,6 @@
 package com.miaomiao.assistant.ui.screens
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,25 +13,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.miaomiao.assistant.data.model.AppInfo
+import com.miaomiao.assistant.ui.InstalledApp
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
 import com.miaomiao.assistant.ui.components.GlassCard
@@ -39,20 +41,12 @@ import com.miaomiao.assistant.ui.components.MiaoHaptics
 /** 应用选择页：多选需要生效的聊天应用。 */
 @Composable
 fun AppSelectScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHaptics) {
+    val activity = LocalContext.current as? ComponentActivity
     val apps by viewModel.installedApps.collectAsStateWithLifecycle()
     val loading by viewModel.appsLoading.collectAsStateWithLifecycle()
-    var query by remember { mutableStateOf("") }
+    val selected = state.settings.selectedApps
 
     LaunchedEffect(Unit) { viewModel.loadInstalledApps() }
-
-    val selected = state.settings.selectedPackages
-    val filtered = remember(apps, query) {
-        if (query.isBlank()) apps
-        else apps.filter {
-            it.label.contains(query, ignoreCase = true) ||
-                it.packageName.contains(query, ignoreCase = true)
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -64,46 +58,48 @@ fun AppSelectScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoH
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(
+                onClick = {
+                    haptics.tap()
+                    activity?.onBackPressedDispatcher?.onBackPressed()
+                },
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
             Text(
-                text = "已选 ${selected.size} 个应用",
-                style = MaterialTheme.typography.titleMedium,
+                text = "选择生效应用",
+                style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(
-                onClick = {
-                    haptics.medium()
-                    viewModel.setSelectedPackages(emptySet())
-                },
-            ) { Text("清空") }
+            Text(
+                text = "已选 ${selected.size} 个",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("搜索应用") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
 
         if (loading && apps.isEmpty()) {
             Text(
                 text = "正在加载应用列表…",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(items = filtered, key = { it.packageName }) { app ->
+            items(items = apps, key = { it.packageName }) { app ->
                 AppRow(
                     app = app,
                     checked = app.packageName in selected,
+                    haptics = haptics,
                     onToggle = { checked ->
                         haptics.tap()
-                        val updated = selected.toMutableSet().apply {
-                            if (checked) add(app.packageName) else remove(app.packageName)
-                        }
-                        viewModel.setSelectedPackages(updated)
+                        viewModel.setSelectedApps(
+                            selected.toMutableSet().apply {
+                                if (checked) add(app.packageName) else remove(app.packageName)
+                            },
+                        )
                     },
                 )
             }
@@ -112,7 +108,12 @@ fun AppSelectScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoH
 }
 
 @Composable
-private fun AppRow(app: AppInfo, checked: Boolean, onToggle: (Boolean) -> Unit) {
+private fun AppRow(
+    app: InstalledApp,
+    checked: Boolean,
+    haptics: MiaoHaptics,
+    onToggle: (Boolean) -> Unit,
+) {
     GlassCard(modifier = Modifier.fillMaxWidth(), onClick = { onToggle(!checked) }) {
         Row(
             modifier = Modifier.fillMaxWidth(),

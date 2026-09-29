@@ -6,15 +6,15 @@ plugins {
 
 android {
     namespace = "com.miaomiao.assistant"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.miaomiao.assistant"
-        // Android 10+ 起步
-        minSdk = 29
+        // Android 8.0+ 起步
+        minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 5
+        versionName = "1.0.0"
         // 向量图标兼容支持
         vectorDrawables { useSupportLibrary = true }
     }
@@ -63,11 +63,11 @@ dependencies {
 
     // 导航
     implementation(libs.androidx.navigation.compose)
-    // DataStore（数据持久化）
-    implementation(libs.androidx.datastore.preferences)
     // 协程
     implementation(libs.kotlinx.coroutines.android)
 
     // 单元测试
     testImplementation(libs.junit)
+    // 本地单测使用真实 org.json（mockable android.jar 中为 stub）
+    testImplementation(libs.json)
 }

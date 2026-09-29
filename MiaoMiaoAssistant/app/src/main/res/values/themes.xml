@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 基础主题：配合 Compose 使用，窗口半透明以呈现液态玻璃效果 -->
-    <style name="Theme.MiaoMiao" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.MiaoAssistant" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <!-- 半透明窗口：让桌面壁纸透过窗口形成毛玻璃 -->
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
