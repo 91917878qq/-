@@ -35,7 +35,7 @@ import com.miaomiao.assistant.ui.components.SectionTitle
 
 private const val APP_VERSION = "2.0.0"
 private const val DEVELOPER = "91917878qq"
-private const val FEEDBACK_EMAIL = "15823489055@163.com"
+private const val FEEDBACK_EMAIL = "1490964435@qq.com"
 
 private val usageTips = listOf(
     "开启无障碍服务，这是自动改写的前提。",
