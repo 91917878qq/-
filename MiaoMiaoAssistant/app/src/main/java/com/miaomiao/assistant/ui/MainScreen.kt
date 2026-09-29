@@ -80,8 +80,8 @@ import com.miaomiao.assistant.ui.screens.RuleListScreen
 import com.miaomiao.assistant.ui.screens.ToolsScreen
 import com.miaomiao.assistant.ui.theme.LocalEffectiveOverride
 import com.miaomiao.assistant.ui.theme.LocalResolvedDark
-import com.miaomiao.assistant.ui.theme.MiaoCream
-import com.miaomiao.assistant.ui.theme.MiaoLavender
+import com.miaomiao.assistant.ui.theme.MiaoBgPink
+import com.miaomiao.assistant.ui.theme.MiaoBgPinkLight
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -146,7 +146,7 @@ private fun PagerShell(
     val pageBg: Color? = override.pageBackground
     val bgModifier: Modifier = pageBg?.let { bg ->
         Modifier.background(bg)
-    } ?: Modifier.background(Brush.verticalGradient(listOf(MiaoCream, MiaoLavender, Color.White)))
+    } ?: Modifier.background(Brush.verticalGradient(listOf(MiaoBgPink, MiaoBgPinkLight, Color.White)))
 
     BoxWithConstraints(Modifier.fillMaxSize().then(bgModifier)) {
         val pageH = with(density) { maxHeight.toPx() }
@@ -217,7 +217,7 @@ private fun PagerShell(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(with(density) { segBarHPx.toDp() }),
+                .onSizeChanged { segSize -> segBarHPx = segSize.height },
         ) {
             if (segBarHPx > 0) {
                 BackdropLayer(
@@ -236,7 +236,6 @@ private fun PagerShell(
                     haptics.tap()
                     scope.launch { pagerState.animateScrollToPage(index) }
                 },
-                onSizePx = { segBarHPx = it },
             )
         }
     }
@@ -285,7 +284,6 @@ private fun SegBar(
     contentOffset: IntOffset,
     pagerState: PagerState,
     onSelect: (Int) -> Unit,
-    onSizePx: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -300,7 +298,7 @@ private fun SegBar(
             }
         }
     }
-    Box(modifier.fillMaxWidth().onSizeChanged { segSize -> onSizePx(segSize.height) }.navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
+    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
         BackdropLayer(
             layer = layer,
             modifier = Modifier.fillMaxSize(),
@@ -309,7 +307,7 @@ private fun SegBar(
         )
         Surface(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .draggable(
                     state = dragState,
                     orientation = Orientation.Horizontal,
@@ -322,7 +320,7 @@ private fun SegBar(
             shadowElevation = 8.dp,
             tonalElevation = 2.dp,
         ) {
-            BoxWithConstraints(Modifier.padding(6.dp)) {
+            BoxWithConstraints(Modifier.padding(6.dp).height(44.dp)) {
                 val density = LocalDensity.current
                 val barWidthPx = with(density) { maxWidth.toPx() }
                 val barHeight = maxHeight

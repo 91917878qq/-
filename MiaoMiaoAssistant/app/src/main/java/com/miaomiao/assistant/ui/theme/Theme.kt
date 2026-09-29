@@ -14,14 +14,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val LightColors = lightColorScheme(
-    primary = MiaoPinkDark,
+    primary = MiaoPink,
     onPrimary = Color.White,
-    primaryContainer = MiaoCream,
+    primaryContainer = MiaoBgPink,
     onPrimaryContainer = MiaoInk,
     secondary = MiaoPurple,
     onSecondary = Color.White,
     tertiary = MiaoBlue,
-    background = MiaoCream,
+    background = MiaoBgPink,
     onBackground = MiaoInk,
     surface = Color.White,
     onSurface = MiaoInk,
