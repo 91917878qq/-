@@ -14,5 +14,9 @@ captures/
 *.aab
 *.log
 
+# 签名密钥（严禁入库）
+keystore/
+keystore.properties
+
 # OS
 .DS_Store
