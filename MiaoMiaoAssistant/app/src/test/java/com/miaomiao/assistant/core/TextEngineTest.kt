@@ -79,23 +79,23 @@ class TextEngineTest {
     // ---------------- 锚点追加 ----------------
 
     @Test
-    fun anchorAppend_alreadyEndsWith_skip() {
-        assertEquals("你好喵", TextEngine.anchorAppend("你好喵", "喵"))
+    fun appendEnd_alreadyEndsWith_skip() {
+        assertEquals("你好喵。", TextEngine.appendEnd("你好喵。", "喵", "。！？ "))
     }
 
     @Test
-    fun anchorAppend_afterPunctuationDedup() {
-        assertEquals("你好喵。", TextEngine.anchorAppend("你好喵。", "喵"))
+    fun appendEnd_insertAfterTrailingPunctuation() {
+        assertEquals("你好喵。", TextEngine.appendEnd("你好。", "喵", "。！？ "))
     }
 
     @Test
-    fun anchorAppend_plainAppend() {
-        assertEquals("你好喵", TextEngine.anchorAppend("你好", "喵"))
+    fun appendEnd_noPunctuationNoBracket_unchanged() {
+        assertEquals("你好", TextEngine.appendEnd("你好", "喵", "。！？ "))
     }
 
     @Test
-    fun anchorAppend_insertBeforeOpenBracket() {
-        assertEquals("你好喵[", TextEngine.anchorAppend("你好[", "喵"))
+    fun appendEnd_insertBeforeOpenBracket() {
+        assertEquals("你好喵[", TextEngine.appendEnd("你好[", "喵", "。！？ "))
     }
 
     // ---------------- 标点感知插入 ----------------

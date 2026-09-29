@@ -249,6 +249,11 @@ object Prefs {
         get() = get(KEY_HIDE_RECENTS, false)
         set(value) = put(KEY_HIDE_RECENTS, value)
 
+    /** 玻璃模糊等级：0 弱 / 1 中 / 2 强（对齐反编译 glass_blur_level，默认 1）。 */
+    var glassBlurLevel: Int
+        get() = get(KEY_GLASS_BLUR_LEVEL, 1).coerceIn(0, 2)
+        set(value) = put(KEY_GLASS_BLUR_LEVEL, value.coerceIn(0, 2))
+
     // ---------------- 崩溃标记（miao_log_prefs） ----------------
 
     var pendingCrash: Boolean
@@ -300,6 +305,7 @@ object Prefs {
     const val KEY_HAPTIC_ENABLED = "haptic_enabled"
     const val KEY_THEME_MODE = "theme_mode"
     const val KEY_HIDE_RECENTS = "hide_recents"
+    const val KEY_GLASS_BLUR_LEVEL = "glass_blur_level"
     const val KEY_PENDING_CRASH = "pending_crash"
     const val KEY_AES_KEY = "aes_key"
 }

@@ -345,7 +345,7 @@ class MiaoOverlayService : Service() {
                 }
                 // 跑管线回填；目标包名取当前前台应用
                 val target = MiaoRuntimeState.currentForeground.value ?: ""
-                val output = TextEngine.process(text, target)
+                val output = TextEngine.processManual(text, target)
                 input.setText(output)
                 input.setSelection(output.length)
                 Haptics.success()

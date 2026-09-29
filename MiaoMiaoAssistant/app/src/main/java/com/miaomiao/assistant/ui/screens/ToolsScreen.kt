@@ -78,15 +78,6 @@ fun ToolsScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text(
-                text = "工具",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-
         // ---------------- 触感 ----------------
         item { SectionTitle("触感") }
         item {

@@ -8,6 +8,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -57,6 +59,8 @@ fun MiaoMiaoTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    ThemeOverrideHolder.ensureLoaded(context)
+    val override = ThemeOverrideHolder.value
     val resolvedDark = when (themeMode) {
         "light" -> false
         "dark" -> true
@@ -70,9 +74,24 @@ fun MiaoMiaoTheme(
         else -> LightColors
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = MiaoTypography,
-        content = content,
+    val effective = EffectiveOverride(
+        cardRadius = override.cardRadius,
+        cardBackground = if (resolvedDark) override.darkCardColor else override.cardColor,
+        pageBackground = if (resolvedDark) override.darkPageBg else override.pageBg,
     )
+
+    CompositionLocalProvider(
+        LocalEffectiveOverride provides effective,
+        LocalResolvedDark provides resolvedDark,
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = MiaoTypography,
+            content = content,
+        )
+    }
 }
+
+/** 当前解析后的深浅色模式（light/dark/system 解析结果），供卡片等组件取用。 */
+val LocalResolvedDark: androidx.compose.runtime.ProvidableCompositionLocal<Boolean> =
+    staticCompositionLocalOf { false }

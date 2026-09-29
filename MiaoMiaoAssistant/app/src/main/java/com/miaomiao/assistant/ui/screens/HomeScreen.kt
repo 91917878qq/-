@@ -50,15 +50,6 @@ fun HomeScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text(
-                text = "喵喵助手",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-
         item { SectionTitle("总开关") }
         item {
             SettingSwitchRow(
