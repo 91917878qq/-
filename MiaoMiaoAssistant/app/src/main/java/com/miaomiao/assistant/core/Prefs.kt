@@ -254,6 +254,11 @@ object Prefs {
         get() = get(KEY_GLASS_BLUR_LEVEL, 1).coerceIn(0, 2)
         set(value) = put(KEY_GLASS_BLUR_LEVEL, value.coerceIn(0, 2))
 
+    /** 首次启动标记：用于驱动首次 960ms 入场动画，之后为常态 450ms 淡入。 */
+    var firstLaunchDone: Boolean
+        get() = get(KEY_FIRST_LAUNCH_DONE, false)
+        set(value) = put(KEY_FIRST_LAUNCH_DONE, value)
+
     // ---------------- 崩溃标记（miao_log_prefs） ----------------
 
     var pendingCrash: Boolean
@@ -306,6 +311,7 @@ object Prefs {
     const val KEY_THEME_MODE = "theme_mode"
     const val KEY_HIDE_RECENTS = "hide_recents"
     const val KEY_GLASS_BLUR_LEVEL = "glass_blur_level"
+    const val KEY_FIRST_LAUNCH_DONE = "first_launch_done"
     const val KEY_PENDING_CRASH = "pending_crash"
     const val KEY_AES_KEY = "aes_key"
 }

@@ -14,9 +14,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.core.app.NotificationManagerCompat
@@ -27,19 +30,40 @@ import com.miaomiao.assistant.ui.MainScreen
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.theme.MiaoMiaoTheme
 
-/** 入场动画：主界面透明度 0→1 并带轻量横向位移入场（对齐反编译 2.3.3 HomeScreen 的渐入+位移）。 */
+/**
+ * 首次启动入场动画（对齐反编译 C0185a 的 first_launch_done 逻辑）：
+ * 首次启动写入 `first_launch_done=true`，并与其他启动一样以整屏透明度渐入；
+ * 首次用 960ms FastOutSlowIn，之后每次用 450ms 淡入。
+ */
 @Composable
 private fun EntryAnimation(content: @Composable () -> Unit) {
+    var firstLaunchDone by remember { mutableStateOf(Prefs.firstLaunchDone) }
+    var animated by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        if (!firstLaunchDone) {
+            Prefs.firstLaunchDone = true
+            firstLaunchDone = true
+            animated = true
+        }
+        onDispose {}
+    }
+
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        progress.animateTo(1f, tween(durationMillis = 960, easing = FastOutSlowInEasing))
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = if (firstLaunchDone && animated) 960 else 450,
+                easing = FastOutSlowInEasing,
+            ),
+        )
     }
     Box(
         Modifier
             .fillMaxSize()
             .graphicsLayer {
                 alpha = progress.value
-                translationX = (1f - progress.value) * size.width * 0.06f
             },
     ) { content() }
 }

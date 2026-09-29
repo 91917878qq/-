@@ -298,7 +298,7 @@ private fun SegBar(
             }
         }
     }
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
+    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = 48.dp, end = 48.dp, top = 0.dp, bottom = 38.dp)) {
         BackdropLayer(
             layer = layer,
             modifier = Modifier.fillMaxSize(),
@@ -320,7 +320,7 @@ private fun SegBar(
             shadowElevation = 8.dp,
             tonalElevation = 2.dp,
         ) {
-            BoxWithConstraints(Modifier.padding(6.dp).height(44.dp)) {
+            BoxWithConstraints(Modifier.padding(6.dp).height(56.dp)) {
                 val density = LocalDensity.current
                 val barWidthPx = with(density) { maxWidth.toPx() }
                 val barHeight = maxHeight
