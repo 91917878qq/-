@@ -33,7 +33,7 @@ import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 import com.miaomiao.assistant.ui.components.SectionTitle
 
-private const val APP_VERSION = "1.0.0"
+private const val APP_VERSION = "2.0.0"
 private const val DEVELOPER = "91917878qq"
 private const val FEEDBACK_EMAIL = "15823489055@163.com"
 
@@ -67,15 +67,6 @@ fun AboutScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHapti
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text(
-                text = "喵喵助手 $APP_VERSION · $DEVELOPER",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp),
-            )
-        }
-
         item { SectionTitle("应用信息") }
         item {
             MiaoCard(modifier = Modifier.fillMaxWidth()) {

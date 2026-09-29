@@ -145,7 +145,7 @@ object Diagnostics {
         return CheckItem(
             label = "版本信息",
             status = Status.NORMAL,
-            advice = "喵喵助手 1.0.0 · Android $sdk · $device",
+            advice = "喵喵助手 2.0.0 · Android $sdk · $device",
         )
     }
 }

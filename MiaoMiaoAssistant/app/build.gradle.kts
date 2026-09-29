@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 5
-        versionName = "1.0.0"
+        versionName = "2.0.0"
         // 向量图标兼容支持
         vectorDrawables { useSupportLibrary = true }
     }
