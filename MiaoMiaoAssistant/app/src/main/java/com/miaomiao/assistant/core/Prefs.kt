@@ -245,15 +245,6 @@ object Prefs {
         get() = get(KEY_THEME_MODE, "system")
         set(value) = put(KEY_THEME_MODE, value)
 
-    var glassEffectEnabled: Boolean
-        get() = get(KEY_GLASS_EFFECT_ENABLED, true)
-        set(value) = put(KEY_GLASS_EFFECT_ENABLED, value)
-
-    /** 模糊等级 0~2。 */
-    var glassBlurLevel: Int
-        get() = get(KEY_GLASS_BLUR_LEVEL, 1).coerceIn(0, 2)
-        set(value) = put(KEY_GLASS_BLUR_LEVEL, value.coerceIn(0, 2))
-
     var hideRecents: Boolean
         get() = get(KEY_HIDE_RECENTS, false)
         set(value) = put(KEY_HIDE_RECENTS, value)
@@ -308,8 +299,6 @@ object Prefs {
     const val KEY_DELAY_MS = "delay_ms"
     const val KEY_HAPTIC_ENABLED = "haptic_enabled"
     const val KEY_THEME_MODE = "theme_mode"
-    const val KEY_GLASS_EFFECT_ENABLED = "glass_effect_enabled"
-    const val KEY_GLASS_BLUR_LEVEL = "glass_blur_level"
     const val KEY_HIDE_RECENTS = "hide_recents"
     const val KEY_PENDING_CRASH = "pending_crash"
     const val KEY_AES_KEY = "aes_key"

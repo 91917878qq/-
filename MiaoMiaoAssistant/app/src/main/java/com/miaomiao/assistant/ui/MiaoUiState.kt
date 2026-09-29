@@ -36,8 +36,6 @@ data class SettingsSnapshot(
     val delayMs: Long = 300,
     val hapticEnabled: Boolean = false,
     val themeMode: String = "system",
-    val glassEffectEnabled: Boolean = true,
-    val glassBlurLevel: Int = 1,
     val hideRecents: Boolean = false,
     val hasVibrator: Boolean = false,
 )

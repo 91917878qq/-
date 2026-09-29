@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 import com.miaomiao.assistant.ui.components.SectionTitle
 import com.miaomiao.assistant.ui.components.SettingClickRow
@@ -141,7 +141,7 @@ private fun TriggerOption(
     haptics: MiaoHaptics,
     onClick: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    MiaoCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

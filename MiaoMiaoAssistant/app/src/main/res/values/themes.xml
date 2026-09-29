@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 基础主题：配合 Compose 使用，窗口半透明以呈现液态玻璃效果 -->
+    <!-- 基础主题：配合 Compose 使用，透明状态栏 / 导航栏 -->
     <style name="Theme.MiaoAssistant" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

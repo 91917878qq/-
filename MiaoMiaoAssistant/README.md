@@ -1,7 +1,7 @@
 # 喵喵助手（MiaoMiao Assistant）v1.0.0
 
 通过无障碍服务监听聊天输入框，把用户输入的文字自动改写为「猫娘语气」。应用包含
-Jetpack Compose 配置界面、悬浮窗手动处理、液态玻璃视觉与拟真触感反馈。
+Jetpack Compose 配置界面、悬浮窗手动处理与拟真触感反馈。
 
 - 语言：Kotlin
 - 架构：单 Activity + Compose + 配置中心（SharedPreferences 单例）
@@ -44,9 +44,9 @@ MiaoMiaoAssistant/
         │   │   ├── receiver/BootReceiver.kt         # 开机恢复悬浮窗
         │   │   ├── ui/
         │   │   │   ├── MainScreen.kt / MainViewModel.kt / MiaoUiState.kt
-        │   │   │   ├── components/             # 玻璃卡片、触感、运行时状态观察
+        │   │   │   ├── components/             # 卡片、触感、运行时状态观察
         │   │   │   ├── screens/                # Home / Config / Tools / About / RuleList / AppSelect
-        │   │   │   └── theme/                  # Color / Theme / Type / LiquidGlassTheme
+        │   │   │   └── theme/                  # Color / Theme / Type
         │   │   └── util/                       # AccessibilityHelper / SystemSettingsNavigator
         │   └── res/
         │       ├── drawable/、mipmap-anydpi-v26/、values/、xml/accessibility_service_config.xml
@@ -161,8 +161,10 @@ trim → 选定颜文字 → 去猫爪标记 → 标点插入 → 去颜文字
   并兼容旧 JSON 格式。
 - **一键检测与日志诊断**：7 项运行环境检测与修复跳转；日志敏感内容 AES-GCM 加密，
   支持导出到 `Download/喵喵助手/logs`，全局崩溃捕获。
-- **视觉与品牌**：应用更名「喵喵助手 1.0.0」，液态玻璃主题、动态取色、依赖深色模式，
+- **视觉与品牌**：应用更名「喵喵助手 1.0.0」，动态取色、跟随深色模式，
   关于页含使用提示、免责声明、更新日志与技术支持说明。
+- **移除液态玻璃效果**：卡片改为不透明实色容器，移除模糊渲染、半透明描边与
+  相关设置项（玻璃效果开关、模糊等级），界面更简洁清晰。
 - **工程配置**：AGP 8.9.1、Gradle 8.11.1、compileSdk 36、minSdk 26、
   versionCode 5；新增 TextEngine / ShareCode 单元测试。
 

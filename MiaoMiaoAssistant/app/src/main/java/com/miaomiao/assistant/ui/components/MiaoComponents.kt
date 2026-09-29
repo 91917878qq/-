@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,19 +18,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,17 +41,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.miaomiao.assistant.core.Haptics
-import com.miaomiao.assistant.ui.theme.LiquidGlassConfig
-import com.miaomiao.assistant.ui.theme.LiquidGlassSurface
-
-/** 液态玻璃配置的 CompositionLocal，由主界面按设置注入。 */
-val LocalLiquidGlass = staticCompositionLocalOf { LiquidGlassConfig() }
-
-/** 用设置中的液态玻璃配置包裹内容。 */
-@Composable
-fun ProvideLiquidGlass(config: LiquidGlassConfig, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalLiquidGlass provides config, content = content)
-}
 
 /**
  * 拟真触感封装：在 Compose 的 [HapticFeedback] 基础上叠加真实硬件震动。
@@ -131,21 +122,23 @@ fun Modifier.pressScale(haptics: MiaoHaptics): Modifier {
         }
 }
 
-/** 液态玻璃卡片。 */
+/** 不透明卡片容器。 */
 @Composable
-fun GlassCard(
+fun MiaoCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+    content: @Composable BoxScope.() -> Unit,
 ) {
-    val config = LocalLiquidGlass.current
     val clickableModifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
-    LiquidGlassSurface(
+    Surface(
         modifier = modifier.then(clickableModifier),
-        enabled = config.enabled,
-        blurRadius = config.blurRadius,
-        content = content,
-    )
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp,
+    ) {
+        Box(modifier = Modifier.padding(16.dp), content = content)
+    }
 }
 
 /** 分组标题。 */
@@ -169,7 +162,7 @@ fun SettingSwitchRow(
     subtitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    GlassCard(
+    MiaoCard(
         modifier = modifier.fillMaxWidth(),
         onClick = {
             haptics.tap()
@@ -207,7 +200,7 @@ fun SettingClickRow(
     value: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    GlassCard(
+    MiaoCard(
         modifier = modifier.fillMaxWidth(),
         onClick = {
             haptics.tap()

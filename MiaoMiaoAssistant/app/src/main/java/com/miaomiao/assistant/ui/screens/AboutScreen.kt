@@ -29,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 import com.miaomiao.assistant.ui.components.SectionTitle
 
@@ -78,7 +78,7 @@ fun AboutScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHapti
 
         item { SectionTitle("应用信息") }
         item {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
+            MiaoCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     InfoRow("应用名称", "喵喵助手")
                     InfoRow("版本", APP_VERSION)
@@ -119,7 +119,7 @@ fun AboutScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHapti
         item { SectionTitle("使用提示") }
         usageTips.forEach { tip ->
             item {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                MiaoCard(modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "•",
@@ -135,7 +135,7 @@ fun AboutScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHapti
 
         item { SectionTitle("免责声明") }
         item {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
+            MiaoCard(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = DISCLAIMER,
                     style = MaterialTheme.typography.bodyMedium,
@@ -146,7 +146,7 @@ fun AboutScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHapti
 
         item { SectionTitle("更新日志") }
         item {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
+            MiaoCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "版本 $APP_VERSION",

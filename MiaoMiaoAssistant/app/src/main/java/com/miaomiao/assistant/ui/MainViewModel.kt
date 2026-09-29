@@ -96,8 +96,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         delayMs = Prefs.delayMs,
         hapticEnabled = Prefs.hapticEnabled,
         themeMode = Prefs.themeMode,
-        glassEffectEnabled = Prefs.glassEffectEnabled,
-        glassBlurLevel = Prefs.glassBlurLevel,
         hideRecents = Prefs.hideRecents,
         hasVibrator = Haptics.hasVibrator(),
     )
@@ -350,14 +348,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setThemeMode(value: String) {
         Prefs.themeMode = value
-    }
-
-    fun setGlassEffectEnabled(value: Boolean) {
-        Prefs.glassEffectEnabled = value
-    }
-
-    fun setGlassBlurLevel(value: Int) {
-        Prefs.glassBlurLevel = value
     }
 
     fun setHideRecents(value: Boolean) {

@@ -44,7 +44,7 @@ import com.miaomiao.assistant.core.Rule
 import com.miaomiao.assistant.core.RulePreset
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 import com.miaomiao.assistant.ui.components.SectionTitle
 import com.miaomiao.assistant.ui.components.SettingClickRow
@@ -273,22 +273,6 @@ fun ConfigScreen(
         }
         item {
             SettingSwitchRow(
-                title = "玻璃效果",
-                subtitle = "半透明毛玻璃质感与边缘高光",
-                checked = s.glassEffectEnabled,
-                onCheckedChange = viewModel::setGlassEffectEnabled,
-                haptics = haptics,
-            )
-        }
-        item {
-            GlassBlurGroup(
-                current = s.glassBlurLevel,
-                haptics = haptics,
-                onSelect = viewModel::setGlassBlurLevel,
-            )
-        }
-        item {
-            SettingSwitchRow(
                 title = "隐藏后台",
                 subtitle = "开启后最近任务与截屏会被保护",
                 checked = s.hideRecents,
@@ -345,7 +329,7 @@ private fun IntervalStepperRow(
     haptics: MiaoHaptics,
     onCommit: (Int) -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -396,7 +380,7 @@ private fun TextInputCard(
     placeholder: String? = null,
 ) {
     var text by remember(value) { mutableStateOf(value) }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Column {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -429,7 +413,7 @@ private fun DelaySliderCard(
     onCommit: (Long) -> Unit,
 ) {
     var value by remember(ms) { mutableFloatStateOf(ms.toFloat()) }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -465,7 +449,7 @@ private fun OverlaySizeSliderCard(
     onCommit: (Float) -> Unit,
 ) {
     var value by remember(size) { mutableFloatStateOf(size) }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -500,7 +484,7 @@ private fun OverlayOpacitySliderCard(
     onCommit: (Float) -> Unit,
 ) {
     var value by remember(opacity) { mutableFloatStateOf(opacity) }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -541,7 +525,7 @@ private fun PresetSection(
     onExport: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        GlassCard(modifier = Modifier.fillMaxWidth()) {
+        MiaoCard(modifier = Modifier.fillMaxWidth()) {
             Column {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -602,7 +586,7 @@ private fun PresetRow(
     onRename: (String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
-    GlassCard(
+    MiaoCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = {
             haptics.tap()
@@ -668,7 +652,7 @@ private fun ThemeModeGroup(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (mode, label) ->
-            GlassCard(
+            MiaoCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     haptics.tap()
@@ -682,37 +666,6 @@ private fun ThemeModeGroup(
                     RadioButton(selected = current == mode, onClick = null)
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GlassBlurGroup(
-    current: Int,
-    haptics: MiaoHaptics,
-    onSelect: (Int) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(0 to "低", 1 to "中", 2 to "高").forEach { (level, label) ->
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    haptics.tap()
-                    onSelect(level)
-                },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = current == level, onClick = null)
-                    Text(
-                        text = "模糊等级 $label",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )

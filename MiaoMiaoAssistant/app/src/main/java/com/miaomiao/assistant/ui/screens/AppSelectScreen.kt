@@ -35,7 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miaomiao.assistant.ui.InstalledApp
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 
 /** 应用选择页：多选需要生效的聊天应用。 */
@@ -114,7 +114,7 @@ private fun AppRow(
     haptics: MiaoHaptics,
     onToggle: (Boolean) -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = { onToggle(!checked) }) {
+    MiaoCard(modifier = Modifier.fillMaxWidth(), onClick = { onToggle(!checked) }) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

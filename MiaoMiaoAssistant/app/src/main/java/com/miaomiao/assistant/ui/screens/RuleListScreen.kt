@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.miaomiao.assistant.core.Rule
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 
 /** 规则列表页：规则增删、清空与恢复默认。 */
@@ -151,7 +151,7 @@ fun RuleListScreen(state: MiaoUiState, viewModel: MainViewModel, haptics: MiaoHa
 
 @Composable
 private fun RuleRow(rule: Rule, haptics: MiaoHaptics, onDelete: () -> Unit) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    MiaoCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

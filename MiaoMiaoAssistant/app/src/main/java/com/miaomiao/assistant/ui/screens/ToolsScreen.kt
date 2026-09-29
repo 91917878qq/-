@@ -36,7 +36,7 @@ import com.miaomiao.assistant.core.Diagnostics.Status
 import com.miaomiao.assistant.core.Prefs
 import com.miaomiao.assistant.ui.MainViewModel
 import com.miaomiao.assistant.ui.MiaoUiState
-import com.miaomiao.assistant.ui.components.GlassCard
+import com.miaomiao.assistant.ui.components.MiaoCard
 import com.miaomiao.assistant.ui.components.MiaoHaptics
 import com.miaomiao.assistant.ui.components.SectionTitle
 import com.miaomiao.assistant.ui.components.SettingClickRow
@@ -100,7 +100,7 @@ fun ToolsScreen(
         }
         if (!s.hasVibrator) {
             item {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                MiaoCard(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "当前设备无振动马达，触感反馈不可用",
                         style = MaterialTheme.typography.bodyMedium,
@@ -152,7 +152,7 @@ fun ToolsScreen(
         item { SectionTitle("日志") }
         if (Prefs.pendingCrash) {
             item {
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                MiaoCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -183,7 +183,7 @@ fun ToolsScreen(
             )
         }
         item {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
+            MiaoCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     Text(text = "崩溃记录", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.padding(2.dp))
@@ -243,7 +243,7 @@ private fun CheckItemRow(check: CheckItem, haptics: MiaoHaptics) {
         }
     }
 
-    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    MiaoCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
