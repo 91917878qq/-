@@ -1,10 +1,10 @@
-import java.io.FileInputStream
+﻿import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // 读取签名配置（不入库）：keystore.properties 若不存在则跳过签名
@@ -19,16 +19,14 @@ val hasSigning = keystoreProps.getProperty("storeFile") != null
 android {
     namespace = "com.miaomiao.assistant"
     compileSdk = 36
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.miaomiao.assistant"
-        // Android 8.0+ 起步
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.0.0"
-        // 向量图标兼容支持
-        vectorDrawables { useSupportLibrary = true }
+        versionCode = 50
+        versionName = "2.5.0"
     }
 
     signingConfigs {
@@ -51,6 +49,9 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {
@@ -62,36 +63,43 @@ android {
         jvmTarget = "17"
     }
 
-    buildFeatures {
-        // 启用 Jetpack Compose
+buildFeatures {
         compose = true
+    }
+
+    lint {
+        disable += "NullSafeMutableLiveData"
     }
 }
 
 dependencies {
-    // AndroidX 基础
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.activity.compose)
+    // Compose 瀹舵棌锛堥€嗗悜纭鐗堟湰 1.9.4锛?    implementation("androidx.compose.ui:ui:1.9.4")
+    implementation("androidx.compose.ui:ui-graphics:1.9.4")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.9.4")
+    implementation("androidx.compose.foundation:foundation:1.9.4")
+    implementation("androidx.compose.foundation:foundation-layout:1.9.4")
+    implementation("androidx.compose.animation:animation:1.9.4")
+    implementation("androidx.compose.animation:animation-core:1.9.4")
+    implementation("androidx.compose.runtime:runtime:1.9.4")
+    implementation("androidx.compose.runtime:runtime-saveable:1.9.4")
+    implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
 
-    // Jetpack Compose（BOM 统一版本）
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    debugImplementation(libs.androidx.compose.ui.tooling)
+    // AndroidX
+    implementation("androidx.core:core:1.15.0")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+    implementation("androidx.navigation:navigation-compose:2.8.3")
+    implementation("androidx.savedstate:savedstate-ktx:1.3.3")
+    implementation("androidx.exifinterface:exifinterface:1.3.6")
 
-    // 导航
-    implementation(libs.androidx.navigation.compose)
-    // 协程
-    implementation(libs.kotlinx.coroutines.android)
+    // Kotlin 鍗忕▼
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // 单元测试
-    testImplementation(libs.junit)
-    // 本地单测使用真实 org.json（mockable android.jar 中为 stub）
-    testImplementation(libs.json)
+    debugImplementation("androidx.compose.ui:ui-tooling:1.9.4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.9.4")
 }

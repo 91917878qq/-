@@ -2,586 +2,505 @@ package com.miaomiao.assistant.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.inputmethod.InputMethodManager
-import androidx.core.app.NotificationCompat
-import com.miaomiao.assistant.MiaoApp
-import com.miaomiao.assistant.R
-import com.miaomiao.assistant.core.Haptics
-import com.miaomiao.assistant.core.Logger
-import com.miaomiao.assistant.core.Logger.d
-import com.miaomiao.assistant.core.Logger.e
-import com.miaomiao.assistant.core.Logger.w
-import com.miaomiao.assistant.core.Prefs
-import com.miaomiao.assistant.core.TextEngine
+import android.view.accessibility.AccessibilityWindowInfo
+import com.miaomiao.assistant.util.Prefs
+import com.miaomiao.assistant.util.Settings
+import com.miaomiao.assistant.util.TextProcessor
+import kotlin.math.max
 
 /**
- * 喵喵助手无障碍服务（核心改写引擎）。
- *
- * 事件处理：
- * - TYPE_VIEW_CLICKED(0x1)：点击发送类控件 → 立即处理并复位
- * - TYPE_VIEW_FOCUSED(0x8)：记录前台
- * - TYPE_VIEW_TEXT_CHANGED(0x10)：记录事件源并调度
- * - TYPE_WINDOW_STATE_CHANGED(0x20)：更新前台包名、切应用重置
- * - TYPE_WINDOW_CONTENT_CHANGED(2048)：调度处理
- *
- * 全部事件包裹 try/catch，任何异常不导致服务崩溃。
+ * 无障碍文本改写服务（逆向重建实现）
+ * 对应原始 MiaoAccessibilityService：
+ *  - 监听指定前台应用的输入框事件
+ *  - 读取文本 → 经文本管线改写 → ACTION_SET_TEXT 写回
  */
 class MiaoAccessibilityService : AccessibilityService() {
 
-    private val handler = Handler(Looper.getMainLooper())
+    companion object {
+        const val TAG = "MiaoAccessibility"
+        const val WECHAT_PKG = "com.tencent.mm"
+        private const val SYSTEM_UI = "com.android.systemui"
+        private const val NOTIF_ID = 81001
+        private const val NOTIF_ERROR_ID = 81002
+        private const val SETTLE_MS = 120L
+        private const val DELETE_GUARD_MS = 700L
+        private const val PROCESS_GUARD_MS = 1500L
+        private const val MAX_DEPTH = 18
+        private const val MAX_VISITED = 500
+        private const val ACTION_SET_TEXT = 0x200000 // 2097152
+        private const val ACTION_ARGUMENT_SET_TEXT = "ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE"
+        private const val ACTION_CURSOR = 0x20000 // 131072
+        private const val ACTION_ARG_SELECTION_START = "ACTION_ARGUMENT_SELECTION_START_INT"
+        private const val ACTION_ARG_SELECTION_END = "ACTION_ARGUMENT_SELECTION_END_INT"
 
-    /** 防抖任务，key 为事件源标识。 */
-    private val pendingTasks = HashMap<String, Runnable>()
+        @Volatile
+        var instance: MiaoAccessibilityService? = null
+            private set
 
-    /** 每个输入框最近一次写回文本，用于抑制回环。 */
-    private val lastOutput = HashMap<String, String>()
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
-    /** 写回后的保护期：在该窗口内忽略同类事件。 */
-    private val writeLockUntil = HashMap<String, Long>()
+        private val WECHAT_EDIT_IDS = listOf(
+            "com.tencent.mm:id/chatting_content_et",
+            "com.tencent.mm:id/alk",
+            "com.tencent.mm:id/alj",
+            "com.tencent.mm:id/y5"
+        )
+        private val SEND_ID_KEYWORDS = listOf("send", "btn_send", "chatting_send_btn", "emoji_send_btn", "anv")
+        private val SEND_TEXTS = listOf("发送", "Send", "SEND")
+    }
 
-    /** 回环检测期：写回文本在此窗口内再次出现视为回环。 */
-    private val echoUntil = HashMap<String, Long>()
+    private data class PkgState(
+        var lastWritten: String = "",
+        var guardUntil: Long = 0L,
+        var lastRaw: String = "",
+        var initialized: Boolean = false,
+        var lastEcho: String = ""
+    )
 
-    /** 处理中标志 + 看门狗复位。 */
-    @Volatile
+    private val pkgStates = HashMap<String, PkgState>()
     private var isProcessing = false
-
-    private val watchDog = Runnable { isProcessing = false }
-
-    private var imeCache: List<String> = emptyList()
-
-    private var prefsUnregister: (() -> Unit)? = null
-
-    // ---------------- 事件入口 ----------------
+    private var guardRunnable: Runnable? = null
+    private var lastEventSource: AccessibilityNodeInfo? = null
+    var currentForeground = ""
+        private set
+    private var processedCount = 0
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val scheduled = HashMap<String, Runnable>()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        isRunning = true
+        instance = this
         try {
-            // 增强配置：包含不重要视图 + 无障碍音量
-            serviceInfo.flags = serviceInfo.flags or 66
+            serviceInfo?.let { info ->
+                info.flags = info.flags or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                setServiceInfo(info)
+            }
         } catch (_: Exception) {
         }
-        MiaoRuntimeState.accessibilityConnected.value = true
-        DiagnosticsHooks.install(this)
-        prefsUnregister = Prefs.register { _, _ -> refreshNotification() }
-        startForeground(NOTIFICATION_SERVICE, buildServiceNotification())
-        d(TAG, "无障碍服务已连接")
+        updateNotification()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
         try {
-            handleEvent(event)
-        } catch (t: Throwable) {
-            e(TAG, "事件处理异常: ${t.message}")
-        }
-    }
-
-    private fun handleEvent(event: AccessibilityEvent?) {
-        val current = event ?: return
-        if (!Prefs.serviceEnabled) return
-
-        val pkg = current.packageName?.toString() ?: return
-        val target = resolveTargetPkg(pkg) ?: return
-        val type = current.eventType
-
-        when (type) {
-            TYPE_VIEW_CLICKED -> {
-                // 点击（发送/回车类）：立即处理并复位
-                scheduleProcessing(target, immediate = true)
-            }
-
-            TYPE_VIEW_FOCUSED -> {
-                // 记录前台：聚焦即更新当前前台
-                MiaoRuntimeState.currentForeground.value = target
-            }
-
-            TYPE_VIEW_TEXT_CHANGED -> {
-                // 记录事件源并调度
-                MiaoRuntimeState.currentForeground.value = target
-                scheduleProcessing(target, immediate = false)
-            }
-
-            TYPE_WINDOW_STATE_CHANGED -> {
-                // 更新前台包名；切应用时重置状态缓存
-                val previous = MiaoRuntimeState.currentForeground.value
-                if (previous != target) {
-                    resetStateCache()
+            if (!Settings.serviceEnabled) return
+            val pkg = event.packageName?.toString() ?: return
+            when (event.eventType) {
+                AccessibilityEvent.TYPE_VIEW_CLICKED -> handleClickEvent(event, pkg)
+                AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                    if (!isImeOrSystem(pkg)) currentForeground = pkg
+                    if (pkg == WECHAT_PKG) scheduleProcess(resolveTargetPkg(pkg))
                 }
-                MiaoRuntimeState.currentForeground.value = target
-                refreshNotification()
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                    if (!isImeOrSystem(pkg)) currentForeground = pkg
+                    if (pkg == WECHAT_PKG) scheduleProcess(resolveTargetPkg(pkg))
+                }
+                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
+                    lastEventSource = safeSource(event)
+                    scheduleProcess(resolveTargetPkg(pkg))
+                }
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                    if (!isImeOrSystem(pkg)) {
+                        if (currentForeground != pkg) resetPkgState(resolveTargetPkg(pkg))
+                        currentForeground = pkg
+                        updateNotification()
+                    }
+                }
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                    val target = resolveTargetPkg(pkg)
+                    if (pkg == WECHAT_PKG || target == WECHAT_PKG) {
+                        lastEventSource = safeSource(event)
+                        scheduleProcess(WECHAT_PKG)
+                    }
+                }
             }
-
-            TYPE_WINDOW_CONTENT_CHANGED -> {
-                MiaoRuntimeState.currentForeground.value = target
-                scheduleProcessing(target, immediate = false)
-            }
+        } catch (t: Throwable) {
+            // 事件处理必须安全失败
         }
     }
 
-    override fun onInterrupt() = Unit
-
-    override fun onUnbind(intent: Intent?): Boolean {
-        MiaoRuntimeState.accessibilityConnected.value = false
-        return super.onUnbind(intent)
+    override fun onInterrupt() {
+        cancelScheduled()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        pendingTasks.values.forEach { handler.removeCallbacks(it) }
-        pendingTasks.clear()
-        lastOutput.clear()
-        writeLockUntil.clear()
-        echoUntil.clear()
-        prefsUnregister?.invoke()
-        prefsUnregister = null
-        isProcessing = false
-        MiaoRuntimeState.accessibilityConnected.value = false
-        DiagnosticsHooks.clear()
-        // 延迟 8s 检测：若无障碍服务仍未运行，发出异常提醒
-        handler.postDelayed({
-            if (!MiaoRuntimeState.accessibilityConnected.value) {
-                notifyServiceDown()
-            }
-        }, 8_000)
-    }
-
-    // ---------------- 包名过滤 ----------------
-
-    /** 把输入法/系统 UI 事件归一化为当前前台应用；未在生效应用列表内返回 null。 */
-    private fun resolveTargetPkg(pkg: String): String? {
-        if (pkg == packageName) return null
-        val foreground = MiaoRuntimeState.currentForeground.value
-        if (pkg == "com.android.systemui") return foreground
-        if (pkg in enabledImePackages()) return foreground
-        // 生效应用为空时视为全部不生效
-        if (pkg !in Prefs.selectedApps) return null
-        return pkg
-    }
-
-    /** 动态获取系统当前启用的输入法包名。 */
-    private fun enabledImePackages(): List<String> {
-        return runCatching {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            val list = imm.enabledInputMethodList.map { it.packageName }
-            if (list.isNotEmpty()) imeCache = list
-            list
-        }.getOrDefault(imeCache)
-    }
-
-    // ---------------- 触发与防抖 ----------------
-
-    /** 当前触发模式：标点触发 > 实时改写 > 手动/关闭。 */
-    private fun currentMode(): Int = when {
-        Prefs.punctuationEnabled -> MODE_PUNCTUATION
-        Prefs.realtimeEnabled -> MODE_REALTIME
-        else -> MODE_NONE
-    }
-
-    /** 防抖延迟：启用处理延迟用 delay_ms，否则固定 SETTLE_MS。 */
-    private fun settleDelay(): Long = if (Prefs.delayEnabled) Prefs.delayMs.coerceAtLeast(1) else SETTLE_MS
-
-    private fun scheduleProcessing(targetPkg: String, immediate: Boolean) {
-        val mode = currentMode()
-        if (mode == MODE_NONE) return
-
-        pendingTasks.values.forEach { handler.removeCallbacks(it) }
-        pendingTasks.clear()
-        val task = Runnable { executeProcess(targetPkg) }
-        pendingTasks["default"] = task
-        if (immediate) {
-            handler.post(task)
-        } else {
-            handler.postDelayed(task, settleDelay())
-        }
-    }
-
-    private fun executeProcess(targetPkg: String) {
-        pendingTasks.remove("default")
-        if (isProcessing) return
-        isProcessing = true
-        handler.removeCallbacks(watchDog)
-        handler.postDelayed(watchDog, PROCESS_GUARD_MS)
-        var node: AccessibilityNodeInfo? = null
-        try {
-            node = locateInput() ?: return
-            if (!canSetText(node)) return
-            val text = node.text?.toString() ?: return
-            if (text.isBlank()) return
-
-            val mode = currentMode()
-            if (mode == MODE_PUNCTUATION && !endsWithPunct(text)) return
-
-            val nodeKey = nodeKeyOf(node)
-            val now = SystemClock.uptimeMillis()
-            val lockUntil = writeLockUntil[nodeKey]
-            if (lockUntil != null && now < lockUntil) return
-            // 回环检测：写回窗口内文本与上次输出一致则跳过
-            val echoDeadline = echoUntil[nodeKey]
-            if (echoDeadline != null && now < echoDeadline && lastOutput[nodeKey] == text) return
-
-            val output = TextEngine.process(text, targetPkg)
-            if (output == text) return
-
-            setTextSafe(node, output) { success ->
-                if (success) {
-                    lastOutput[nodeKey] = output
-                    writeLockUntil[nodeKey] = SystemClock.uptimeMillis() + DELETE_GUARD_MS
-                    echoUntil[nodeKey] = SystemClock.uptimeMillis() + ECHO_DETECT_MS
-                    MiaoRuntimeState.processedCount.value = MiaoRuntimeState.processedCount.value + 1
-                    Haptics.success()
-                    refreshNotification()
-                    d(TAG, "改写成功 [$text] -> [$output] @$targetPkg")
-                } else {
-                    w(TAG, "改写失败 @$targetPkg")
-                }
-            }
-        } catch (t: Throwable) {
-            e(TAG, "处理异常: ${t.message}")
-        } finally {
-            isProcessing = false
-            handler.removeCallbacks(watchDog)
-        }
-    }
-
-    /** 标点触发：文本以配置的标点集合字符结尾才算触发。 */
-    private fun endsWithPunct(text: String): Boolean {
-        val chars = Prefs.punctuationChars
-        if (chars.isEmpty()) return false
-        return text.lastOrNull()?.let { it in chars } == true
-    }
-
-    // ---------------- 输入框定位（多级兜底） ----------------
-
-    private val WECHAT_INPUT_IDS = listOf(
-        "com.tencent.mm:id/chatting_content_et",
-        "com.tencent.mm:id/alk",
-        "com.tencent.mm:id/alj",
-        "com.tencent.mm:id/y5",
-    )
-
-    private fun locateInput(): AccessibilityNodeInfo? {
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return null
-
-        // 1. 微信控件 id 直查（排除密码框）
-        for (id in WECHAT_INPUT_IDS) {
-            val found = runCatching { root.findAccessibilityNodeInfosByViewId(id) }.getOrNull()
-                ?.firstOrNull { it.isVisibleToUser && !it.isPassword && canSetText(it) }
-            if (found != null) return found
-        }
-
-        // 2. 递归类名查找
-        val byClass = findEditableByClass(root)
-        if (byClass != null) return byClass
-
-        // 3. 打分搜索
-        val best = findBestEditable(root)
-        if (best != null) return best
-
-        // root 本身也可能就是输入框
-        return root.takeIf { canSetText(it) }
-    }
-
-    /** 递归找类名含 EditText/TextInputEditText/MMEditText 且 canSetText 为真。 */
-    private fun findEditableByClass(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var visited = 0
-        fun dfs(node: AccessibilityNodeInfo?, depth: Int): AccessibilityNodeInfo? {
-            if (node == null || depth > MAX_DEPTH) return null
-            if (++visited > MAX_NODES) return null
-            val cls = node.className?.toString().orEmpty()
-            if (cls.contains("EditText", ignoreCase = true) ||
-                cls.contains("TextInputEditText", ignoreCase = true) ||
-                cls.contains("MMEditText", ignoreCase = true)
-            ) {
-                if (canSetText(node)) return node
-            }
-            val childCount = node.childCount
-            for (i in 0 until childCount) {
-                val child = node.getChild(i) ?: continue
-                val result = dfs(child, depth + 1)
-                if (result != null) return result
-            }
-            return null
-        }
-        return dfs(root, 0)
-    }
-
-    /**
-     * 打分搜索最优可编辑框：
-     * isFocused+100 / isEditable+40 / EditText类+20 / 非空文本+10 / isVisibleToUser+5。
-     * 遍历 rootInActiveWindow 与所有交互窗口，深度上限 18、节点上限 500。
-     */
-    private fun findBestEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var best: AccessibilityNodeInfo? = null
-        var bestScore = -1
-        var visited = 0
-
-        fun score(node: AccessibilityNodeInfo): Int {
-            var s = 0
-            if (node.isFocused) s += 100
-            if (node.isEditable) s += 40
-            val cls = node.className?.toString().orEmpty()
-            if (cls.contains("EditText") || cls.contains("TextInputEditText") || cls.contains("MMEditText")) s += 20
-            if (!node.text.isNullOrEmpty()) s += 10
-            if (node.isVisibleToUser) s += 5
-            return s
-        }
-
-        fun traverse(node: AccessibilityNodeInfo?, depth: Int) {
-            if (node == null || depth > MAX_DEPTH) return
-            if (++visited > MAX_NODES) return
-            if (canSetText(node)) {
-                val s = score(node)
-                if (s > bestScore) {
-                    bestScore = s
-                    best = node
-                }
-            }
-            val childCount = node.childCount
-            for (i in 0 until childCount) {
-                traverse(node.getChild(i), depth + 1)
-            }
-        }
-
-        traverse(root, 0)
-        if (best == null || bestScore < 40) {
-            // root 窗口无合适项时，遍历交互窗口
-            val windows = runCatching { windows }.getOrNull() ?: emptyList()
-            for (window in windows) {
-                val wRoot = window.root ?: continue
-                visited = 0
-                traverse(wRoot, 0)
-            }
-        }
-        return best?.takeIf { canSetText(it) }
-    }
-
-    /** 可设置文本：非密码且支持 ACTION_SET_TEXT。 */
-    private fun canSetText(node: AccessibilityNodeInfo): Boolean {
-        return runCatching {
-            !node.isPassword &&
-                (node.actions and AccessibilityNodeInfo.ACTION_SET_TEXT) != 0
-        }.getOrDefault(false)
-    }
-
-    private fun nodeKeyOf(node: AccessibilityNodeInfo): String {
-        val viewId = node.viewIdResourceName
-        return if (!viewId.isNullOrEmpty()) viewId else "node:${node.hashCode()}"
-    }
-
-    // ---------------- 写回 ----------------
-
-    /**
-     * 写回文本：先 ACTION_SET_TEXT，成功后移动光标到末尾。
-     * 失败：延迟 50ms → refresh 重试 → 再失败重定位后重试。
-     */
-    private fun setTextSafe(node: AccessibilityNodeInfo, text: String, onDone: (Boolean) -> Unit) {
-        if (performSetText(node, text)) {
-            setCursorToEnd(node, text)
-            onDone(true)
-            return
-        }
-        handler.postDelayed({
-            val available = runCatching { node.refresh() }.getOrDefault(false)
-            if (!available) {
-                relocateAndRetry(text, onDone)
-                return@postDelayed
-            }
-            if (performSetText(node, text)) {
-                setCursorToEnd(node, text)
-                onDone(true)
-                return@postDelayed
-            }
-            relocateAndRetry(text, onDone)
-        }, RETRY_DELAY_MS)
-    }
-
-    private fun relocateAndRetry(text: String, onDone: (Boolean) -> Unit) {
-        val fresh = locateInput() ?: run { onDone(false); return }
-        if (performSetText(fresh, text)) {
-            setCursorToEnd(fresh, text)
-            onDone(true)
-        } else {
-            onDone(false)
-        }
-    }
-
-    private fun performSetText(node: AccessibilityNodeInfo, text: String): Boolean {
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
-        }
-        return runCatching { node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) }
-            .getOrDefault(false)
-    }
-
-    private fun setCursorToEnd(node: AccessibilityNodeInfo, text: String): Boolean {
-        val arguments = Bundle().apply {
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
-            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
-        }
-        return runCatching { node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments) }
-            .getOrDefault(false)
-    }
-
-    // ---------------- 保活与通知 ----------------
-
-    /** 对外：刷新常驻通知（标题/副标题动态更新）。 */
-    fun refreshNotification() {
-        runCatching { startForeground(NOTIFICATION_SERVICE, buildServiceNotification()) }
-    }
-
-    private fun buildServiceNotification(): android.app.Notification {
-        val pending = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, com.miaomiao.assistant.MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val subtitle = buildSubtitle()
-        return NotificationCompat.Builder(this, MiaoApp.CHANNEL_SERVICE)
-            .setSmallIcon(R.drawable.ic_cat_placeholder)
-            .setContentTitle(getString(R.string.service_notification_title))
-            .setContentText(subtitle)
-            .setContentIntent(pending)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
-    }
-
-    /** 副标题：正在监听 → 正在后台运行 → 已启用悬浮窗功能。 */
-    private fun buildSubtitle(): String {
-        val foreground = MiaoRuntimeState.currentForeground.value
-        val count = MiaoRuntimeState.processedCount.value
-        if (foreground != null && foreground in Prefs.selectedApps) {
-            val label = appLabel(foreground)
-            return "正在监听：$label，已处理 $count 次"
-        }
-        if (MiaoRuntimeState.overlayRunning.value) return "已启用悬浮窗功能"
-        return "正在后台运行"
-    }
-
-    private fun appLabel(pkg: String): String {
-        return runCatching {
-            val pm = packageManager
-            val info = pm.getApplicationInfo(pkg, 0)
-            pm.getApplicationLabel(info).toString()
-        }.getOrDefault(pkg)
-    }
-
-    /** 服务异常提醒（ID 81002），点击跳无障碍设置。 */
-    private fun notifyServiceDown() {
-        val pending = PendingIntent.getActivity(
-            this,
-            1,
-            Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val notification = NotificationCompat.Builder(this, MiaoApp.CHANNEL_ERROR)
-            .setSmallIcon(R.drawable.ic_cat_placeholder)
-            .setContentTitle("无障碍服务异常，请重新开启")
-            .setContentText("点击前往开启喵喵助手无障碍服务")
-            .setContentIntent(pending)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this)
-                .notify(NOTIFICATION_SERVICE_DOWN, notification)
-        }
-    }
-
-    // ---------------- 诊断探针 ----------------
-
-    /** 微信/QQ 前台时检测能否定位输入框，供一键检测调用。 */
-    fun diagnoseWeChatInput(): Boolean {
-        val foreground = MiaoRuntimeState.currentForeground.value
-        if (foreground != "com.tencent.mm" && foreground != "com.tencent.mobileqq") return false
-        val node = locateInput()
-        return node != null
-    }
-
-    // ---------------- 其它 ----------------
-
-    private fun resetStateCache() {
-        pendingTasks.values.forEach { handler.removeCallbacks(it) }
-        pendingTasks.clear()
-        lastOutput.clear()
-        writeLockUntil.clear()
-        echoUntil.clear()
-        isProcessing = false
-        handler.removeCallbacks(watchDog)
-    }
-
-    override fun onTrimMemory(level: Int) {
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE) {
-            lastOutput.clear()
-            writeLockUntil.clear()
-            echoUntil.clear()
-        }
+        isRunning = false
+        instance = null
+        handler.removeCallbacksAndMessages(null)
+        pkgStates.clear()
+        lastEventSource = null
     }
 
     override fun onLowMemory() {
-        lastOutput.clear()
-        writeLockUntil.clear()
-        echoUntil.clear()
+        pkgStates.clear()
+        cancelScheduled()
     }
 
-    companion object {
-        private const val TAG = "MiaoAccessibility"
+    // ---------- 调度 ----------
 
-        // 事件类型
-        private const val TYPE_VIEW_CLICKED = 0x00000001
-        private const val TYPE_VIEW_FOCUSED = 0x00000008
-        private const val TYPE_VIEW_TEXT_CHANGED = 0x00000010
-        private const val TYPE_WINDOW_STATE_CHANGED = 0x00000020
-        private const val TYPE_WINDOW_CONTENT_CHANGED = 0x00000800
-
-        // 触发模式
-        private const val MODE_NONE = 0
-        private const val MODE_REALTIME = 1
-        private const val MODE_PUNCTUATION = 2
-
-        // 关键常量
-        const val SETTLE_MS = 120L
-        const val PROCESS_GUARD_MS = 1500L
-        const val DELETE_GUARD_MS = 700L
-        const val ECHO_DETECT_MS = 800L
-        const val RETRY_DELAY_MS = 50L
-        const val MAX_DEPTH = 18
-        const val MAX_NODES = 500
-
-        const val NOTIFICATION_SERVICE = 81001
-        const val NOTIFICATION_SERVICE_DOWN = 81002
-    }
-}
-
-/** 独立小工具：避免在伴生对象内持有 Activity context。 */
-
-/**
- * 诊断探针桥：把本服务实例暴露给 [com.miaomiao.assistant.core.Diagnostics]。
- */
-object DiagnosticsHooks {
-    @Volatile
-    private var service: MiaoAccessibilityService? = null
-
-    fun install(s: MiaoAccessibilityService) {
-        service = s
-        com.miaomiao.assistant.core.Diagnostics.wechatLocateProbe = { s.diagnoseWeChatInput() }
+    private fun scheduleProcess(pkg: String) {
+        if (pkg.isEmpty()) return
+        val apps = Settings.selectedApps()
+        if (apps.isEmpty() || pkg !in apps) return
+        scheduled.remove(pkg)?.let { handler.removeCallbacks(it) }
+        val delay = if (Settings.delayEnabled) Settings.delayMs else SETTLE_MS
+        val r = Runnable { scheduled.remove(pkg); doProcess(pkg) }
+        scheduled[pkg] = r
+        handler.postDelayed(r, delay)
     }
 
-    fun clear() {
-        service = null
-        com.miaomiao.assistant.core.Diagnostics.wechatLocateProbe = null
+    private fun flushScheduled(pkg: String) {
+        scheduled.remove(pkg)?.let {
+            handler.removeCallbacks(it)
+            doProcess(pkg)
+        }
     }
+
+    private fun cancelScheduled() {
+        scheduled.values.forEach { handler.removeCallbacks(it) }
+        scheduled.clear()
+    }
+
+    private fun resetPkgState(pkg: String) {
+        if (pkg.isEmpty()) return
+        pkgStates.remove(pkg)
+        cancelScheduled()
+    }
+
+    private fun resolveTargetPkg(pkg: String): String {
+        if (isImeOrSystem(pkg)) return currentForeground
+        if (pkg != currentForeground) {
+            currentForeground = pkg
+            updateNotification()
+        }
+        return pkg
+    }
+
+    private fun isImeOrSystem(pkg: String): Boolean =
+        pkg == packageName || pkg == SYSTEM_UI
+
+    private fun safeSource(event: AccessibilityEvent): AccessibilityNodeInfo? = try {
+        event.source
+    } catch (_: Exception) {
+        null
+    }
+
+    // ---------- 点击/发送检测 ----------
+
+    private fun handleClickEvent(event: AccessibilityEvent, pkg: String) {
+        val source = safeSource(event) ?: return
+        try {
+            val viewId = source.viewIdResourceName ?: ""
+            val text = source.text?.toString() ?: ""
+            val desc = source.contentDescription?.toString() ?: ""
+            val combined = "$text $desc $viewId"
+            if (SEND_ID_KEYWORDS.any { viewId.contains(it, true) } ||
+                SEND_TEXTS.any { combined.contains(it) }
+            ) {
+                flushScheduled(pkg)
+                resetPkgState(pkg)
+            }
+        } catch (_: Exception) {
+        } finally {
+            try {
+                source.recycle()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // ---------- 核心处理 ----------
+
+    private fun doProcess(pkg: String) {
+        if (isProcessing) return
+        val st = pkgStates.getOrPut(pkg) { PkgState() }
+        val now = System.currentTimeMillis()
+        if (now < st.guardUntil) return
+
+        val input = findInputNode(lastEventSource, pkg == WECHAT_PKG) ?: return
+        try {
+            var text = input.text?.toString() ?: return
+            if (text.isEmpty()) {
+                // 尝试刷新
+                try {
+                    input.refresh()
+                    text = input.text?.toString() ?: return
+                } catch (_: Exception) {
+                    return
+                }
+            }
+            if (text.isEmpty()) {
+                st.lastWritten = ""
+                st.lastRaw = ""
+                st.lastEcho = ""
+                return
+            }
+
+            // 密码框跳过
+            if (input.isPassword) return
+
+            // 回声/重复检测
+            if (text == st.lastEcho && text == st.lastWritten) return
+            st.lastEcho = text
+            if (text == st.lastWritten) return
+
+            // 删除防抖
+            if (st.lastWritten.isNotEmpty() && text.length < st.lastWritten.length &&
+                st.lastWritten.startsWith(text)
+            ) {
+                st.guardUntil = now + DELETE_GUARD_MS
+                st.lastWritten = text
+                return
+            }
+
+            val processed = TextProcessor.process(text, pkg == WECHAT_PKG)
+            if (processed == text) {
+                st.lastWritten = text
+                return
+            }
+            writeText(pkg, input, processed)
+        } catch (_: Exception) {
+        } finally {
+            try {
+                input.recycle()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun writeText(pkg: String, node: AccessibilityNodeInfo, text: String) {
+        isProcessing = true
+        armProcessingGuard()
+        pkgStates[pkg]?.lastWritten = text
+        processedCount++
+        updateNotification()
+
+        if (!setTextSafe(node, text)) {
+            handler.postDelayed({
+                try {
+                    node.refresh()
+                } catch (_: Exception) {
+                }
+                if (!setTextSafe(node, text)) {
+                    val alt = findInputNode(lastEventSource, pkg == WECHAT_PKG)
+                    if (alt != null) {
+                        setTextSafe(alt, text)
+                        setCursorToEnd(alt, text.length)
+                        try {
+                            alt.recycle()
+                        } catch (_: Exception) {
+                        }
+                    }
+                } else {
+                    setCursorToEnd(node, text.length)
+                }
+                finishProcessing()
+            }, 50L)
+        } else {
+            setCursorToEnd(node, text.length)
+            handler.postDelayed({ finishProcessing() }, 40L)
+        }
+    }
+
+    private fun armProcessingGuard() {
+        guardRunnable?.let { handler.removeCallbacks(it) }
+        guardRunnable = Runnable { isProcessing = false }
+        handler.postDelayed(guardRunnable!!, PROCESS_GUARD_MS)
+    }
+
+    private fun finishProcessing() {
+        isProcessing = false
+        guardRunnable?.let { handler.removeCallbacks(it) }
+        guardRunnable = null
+    }
+
+    private fun setTextSafe(node: AccessibilityNodeInfo, text: String): Boolean = try {
+        val bundle = Bundle()
+        bundle.putCharSequence(ACTION_ARGUMENT_SET_TEXT, text)
+        node.performAction(ACTION_SET_TEXT, bundle)
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun setCursorToEnd(node: AccessibilityNodeInfo, len: Int) {
+        try {
+            val b = Bundle()
+            b.putInt(ACTION_ARG_SELECTION_START, len)
+            b.putInt(ACTION_ARG_SELECTION_END, len)
+            node.performAction(ACTION_CURSOR, b)
+        } catch (_: Exception) {
+        }
+    }
+
+    // ---------- 输入框查找 ----------
+
+    private fun isEditTextClass(name: CharSequence?): Boolean {
+        val s = name?.toString() ?: return false
+        return s.contains("EditText", true) ||
+            s.contains("TextInputEditText", true) ||
+            s.contains("MMEditText", true)
+    }
+
+    private fun canSetText(node: AccessibilityNodeInfo): Boolean = try {
+        if (node.isPassword) false
+        else (node.actions and ACTION_SET_TEXT) != 0
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun findWeChatById(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (root == null) return null
+        for (id in WECHAT_EDIT_IDS) {
+            try {
+                root.findAccessibilityNodeInfosByViewId(id)?.forEach { n ->
+                    if (!n.isPassword && (n.isEditable || isEditTextClass(n.className) || canSetText(n))) {
+                        return AccessibilityNodeInfo.obtain(n)
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return null
+    }
+
+    private fun findInputNode(root: AccessibilityNodeInfo?, wechat: Boolean): AccessibilityNodeInfo? {
+        if (wechat && root != null) {
+            findWeChatById(root)?.let { return it }
+        }
+        val roots = collectRoots()
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = -1
+        for (r in roots) {
+            val found = findBestEditable(r, true, 0, intArrayOf(0))
+            if (found != null && found.ordinal > bestScore) {
+                bestScore = found.ordinal
+                best?.let { try { it.recycle() } catch (_: Exception) {} }
+                best = found.node
+            } else {
+                found?.node?.let { try { it.recycle() } catch (_: Exception) {} }
+            }
+            try {
+                r.recycle()
+            } catch (_: Exception) {
+            }
+        }
+        return best
+    }
+
+    private data class BestNode(val node: AccessibilityNodeInfo?, val ordinal: Int)
+
+    private fun findBestEditable(
+        node: AccessibilityNodeInfo?,
+        allowEditText: Boolean,
+        depth: Int,
+        visited: IntArray
+    ): BestNode? {
+        if (node == null || depth > MAX_DEPTH) return null
+        if (visited[0]++ > MAX_VISITED) return null
+        var best = BestNode(null, -1)
+        if (isEditableCandidate(node, allowEditText)) {
+            var score = if (node.isFocused) 100 else 0
+            try {
+                if (node.isEditable) score += 40
+                if (isEditTextClass(node.className)) score += 20
+                if (!node.text.isNullOrEmpty()) score += 10
+                if (node.isVisibleToUser) score += 5
+            } catch (_: Exception) {
+            }
+            best = BestNode(AccessibilityNodeInfo.obtain(node), score)
+        }
+        val childCount = try {
+            node.childCount
+        } catch (_: Exception) {
+            0
+        }
+        for (i in 0 until childCount) {
+            val child = try {
+                node.getChild(i)
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            val sub = findBestEditable(child, allowEditText, depth + 1, visited)
+            try {
+                child.recycle()
+            } catch (_: Exception) {
+            }
+            if (sub != null && sub.ordinal > best.ordinal) best = sub
+        }
+        return best
+    }
+
+    private fun isEditableCandidate(node: AccessibilityNodeInfo, allowEditText: Boolean): Boolean {
+        if (node == null) return false
+        return try {
+            if (node.isPassword) return false
+            if (canSetText(node)) return true
+            allowEditText && (node.isEditable || isEditTextClass(node.className))
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun collectRoots(): List<AccessibilityNodeInfo> {
+        val list = ArrayList<AccessibilityNodeInfo>()
+        try {
+            rootInActiveWindow?.let { list.add(it) }
+        } catch (_: Exception) {
+        }
+        try {
+            windows.forEach { w ->
+                try {
+                    val root = w.root
+                    if (root != null && root !in list) list.add(root)
+                } catch (_: Exception) {
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return list
+    }
+
+    // ---------- 通知 ----------
+
+    private fun updateNotification() {
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val text = if (currentForeground.isNotEmpty() &&
+                Settings.selectedApps().contains(currentForeground)
+            ) {
+                "正在监听：$currentForeground，已处理 $processedCount 次"
+            } else {
+                "正在后台运行"
+            }
+            nm.notify(NOTIF_ID, buildNotification(text))
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildNotification(text: String): android.app.Notification =
+        android.app.Notification.Builder(this, "miao_service_channel")
+            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setContentTitle("喵喵助手运行中")
+            .setContentText(text)
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setCategory(android.app.Notification.CATEGORY_SERVICE)
+            .setContentIntent(
+                android.app.PendingIntent.getActivity(
+                    this, 0,
+                    Intent(this, com.miaomiao.assistant.MainActivity::class.java),
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+            .build()
 }

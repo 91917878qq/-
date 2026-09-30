@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 猫系主题色 -->
-    <color name="miao_pink">#FFF88FB0</color>
-    <color name="miao_purple">#FFCE93D8</color>
-    <color name="miao_blue">#FF8ECAE6</color>
-    <color name="window_bg">#E6FFF0F5</color>
-</resources>
