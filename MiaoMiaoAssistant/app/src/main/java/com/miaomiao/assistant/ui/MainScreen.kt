@@ -39,10 +39,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,7 +65,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.miaomiao.assistant.core.Prefs
+import com.miaomiao.assistant.ui.components.EnterCounter
+import com.miaomiao.assistant.ui.components.LocalEnterCounter
+import com.miaomiao.assistant.ui.components.LocalPageEnter
 import com.miaomiao.assistant.ui.components.MiaoHaptics
+import com.miaomiao.assistant.ui.components.PageEnterAnim
 import com.miaomiao.assistant.ui.components.rememberMiaoHaptics
 import com.miaomiao.assistant.ui.glass.BackdropLayer
 import com.miaomiao.assistant.ui.glass.blurRadiusPx
@@ -134,6 +141,16 @@ private fun PagerShell(
     val topInsetPx = WindowInsets.statusBars.getTop(density)
     val blurPx = with(density) { blurRadiusPx(Prefs.glassBlurLevel) }
 
+    // 页面切换方向（对齐反编译 EnterAnim.dir：前进 1 / 后退 -1）
+    var lastPage by remember { mutableIntStateOf(pagerState.currentPage) }
+    var pageEnterDir by remember { mutableIntStateOf(1) }
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != lastPage) {
+            pageEnterDir = if (pagerState.currentPage > lastPage) 1 else -1
+            lastPage = pagerState.currentPage
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.message.collect { snackbarHostState.showSnackbar(it) }
     }
@@ -168,11 +185,22 @@ private fun PagerShell(
                             .fillMaxSize()
                             .pagerParallax(pagerState, page),
                     ) {
-                        when (page) {
-                            0 -> HomeScreen(state, viewModel, haptics, openApps)
-                            1 -> ConfigScreen(state, viewModel, haptics, openRules)
-                            2 -> ToolsScreen(state, viewModel, haptics, openApps)
-                            3 -> AboutScreen(state, viewModel, haptics)
+                        val counter = remember { EnterCounter() }
+                        val anim = PageEnterAnim(
+                            token = page,
+                            dir = pageEnterDir,
+                            visible = page == pagerState.currentPage,
+                        )
+                        CompositionLocalProvider(
+                            LocalPageEnter provides anim,
+                            LocalEnterCounter provides counter,
+                        ) {
+                            when (page) {
+                                0 -> HomeScreen(state, viewModel, haptics, openApps)
+                                1 -> ConfigScreen(state, viewModel, haptics, openRules)
+                                2 -> ToolsScreen(state, viewModel, haptics, openApps)
+                                3 -> AboutScreen(state, viewModel, haptics)
+                            }
                         }
                     }
                 }

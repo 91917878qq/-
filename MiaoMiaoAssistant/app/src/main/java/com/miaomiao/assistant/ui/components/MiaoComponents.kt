@@ -1,5 +1,7 @@
 package com.miaomiao.assistant.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -28,10 +30,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,12 +52,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.miaomiao.assistant.core.Haptics
 import com.miaomiao.assistant.ui.theme.LocalEffectiveOverride
 import com.miaomiao.assistant.ui.theme.LocalResolvedDark
+import kotlinx.coroutines.delay
+import kotlin.math.min
 
 /**
  * 拟真触感封装：在 Compose 的 [HapticFeedback] 基础上叠加真实硬件震动。
@@ -95,6 +103,26 @@ fun rememberMiaoHaptics(enabled: Boolean): MiaoHaptics {
     return remember(haptic, enabled) { MiaoHaptics(haptic, enabled) }
 }
 
+// ---------------- 页面进入动画（对齐反编译 PageEnter.kt） ----------------
+
+/** 页面进入动画参数：token=页内序号，dir=进入方向（±1），visible=当前是否可见。 */
+@Immutable
+data class PageEnterAnim(
+    val token: Int,
+    val dir: Int,
+    val visible: Boolean,
+)
+
+/** 页面级共享的错落计数（每张卡片进入时自增，产生交错延迟）。 */
+@Immutable
+class EnterCounter {
+    var count: Int = 0
+}
+
+/** 由 MainScreen 每页提供：页面进入动画上下文。 */
+val LocalPageEnter = staticCompositionLocalOf<PageEnterAnim?> { null }
+val LocalEnterCounter = staticCompositionLocalOf<EnterCounter> { EnterCounter() }
+
 /**
  * 按下缩放 + 弹簧回弹的修饰符。
  *
@@ -134,7 +162,7 @@ fun Modifier.pressScale(haptics: MiaoHaptics): Modifier {
         }
 }
 
-/** 不透明卡片容器（还原 2.3.3 PremiumCard：按压收缩、角部层叠阴影、白色高光描边与按压辉光）。 */
+/** 不透明卡片容器（还原 2.3.3 PremiumCard：按压收缩、角部层叠阴影、白色高光描边、按压辉光与错落进入动画）。 */
 @Composable
 fun MiaoCard(
     modifier: Modifier = Modifier,
@@ -153,8 +181,36 @@ fun MiaoCard(
     )
     val clickableModifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
 
+    // ---- 页面错落进入动画（对齐反编译 staggerEnter，PageEnter.kt:51） ----
+    val pageEnter = LocalPageEnter.current
+    val enterCounter = LocalEnterCounter.current
+    val enterAnim = remember { Animatable(0f) }
+    if (pageEnter != null) {
+        LaunchedEffect(pageEnter.token, pageEnter.visible) {
+            if (!pageEnter.visible) {
+                enterAnim.snapTo(0f)
+            } else {
+                val idx = enterCounter.count
+                enterCounter.count = idx + 1
+                val delayMs = min(idx * 30, 120)
+                delay(delayMs.toLong())
+                enterAnim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                )
+            }
+        }
+    }
+
     Box(
         modifier = modifier
+            .graphicsLayer {
+                if (pageEnter != null) {
+                    val progress = if (pageEnter.visible) enterAnim.value else 0f
+                    alpha = progress
+                    translationX = (1f - progress) * 28.dp.toPx() * pageEnter.dir
+                }
+            }
             .pointerInput(Unit) {
                 if (onClick == null) return@pointerInput
                 awaitEachGesture {
