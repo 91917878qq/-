@@ -41,20 +41,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -137,7 +133,6 @@ private fun PagerShell(
     val density = LocalDensity.current
     val topInsetPx = WindowInsets.statusBars.getTop(density)
     val blurPx = with(density) { blurRadiusPx(Prefs.glassBlurLevel) }
-    var segBarHPx by remember { mutableStateOf(0) }
 
     LaunchedEffect(viewModel) {
         viewModel.message.collect { snackbarHostState.showSnackbar(it) }
@@ -213,29 +208,34 @@ private fun PagerShell(
         }
 
         // ---------------- 底栏玻璃 + 拖动 ----------------
+        // 固定高度布局：不再依赖 onSizeChanged 动态测量，避免测量反馈导致底栏错位
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .onSizeChanged { segSize -> segBarHPx = segSize.height },
+                .navigationBarsPadding(),
         ) {
-            if (segBarHPx > 0) {
-                BackdropLayer(
-                    layer = layer,
-                    modifier = Modifier.fillMaxSize(),
-                    blurRadiusPx = blurPx,
-                    contentOffset = IntOffset(0, -((pageH - segBarHPx).toInt())),
-                )
-            }
-            SegBar(
+            BackdropLayer(
                 layer = layer,
-                blurPx = blurPx,
-                contentOffset = IntOffset(0, -((pageH - segBarHPx).toInt())),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, end = 48.dp, bottom = 38.dp)
+                    .height(68.dp),
+                blurRadiusPx = blurPx,
+                contentOffset = IntOffset(
+                    0,
+                    -((pageH - with(density) { (48.dp + 38.dp + 68.dp).toPx() }).toInt()),
+                ),
+            )
+            SegBar(
                 pagerState = pagerState,
                 onSelect = { index ->
                     haptics.tap()
                     scope.launch { pagerState.animateScrollToPage(index) }
                 },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, end = 48.dp, bottom = 38.dp),
             )
         }
     }
@@ -275,13 +275,10 @@ private fun TopTitleBar(title: String) {
 /**
  * 底部液态分段导航（对齐反编译 LiquidGlassNavBar/LiquidGlass）：
  * 整条底栏可水平拖动驱动页面翻页；滑块跟随 currentPage + offsetFraction；
- * 点击某段直接切换；背景为玻璃模糊层。
+ * 点击某段直接切换；背景为玻璃模糊层（由调用方提供）。
  */
 @Composable
 private fun SegBar(
-    layer: GraphicsLayer,
-    blurPx: Float,
-    contentOffset: IntOffset,
     pagerState: PagerState,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -298,73 +295,65 @@ private fun SegBar(
             }
         }
     }
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = 48.dp, end = 48.dp, top = 0.dp, bottom = 38.dp)) {
-        BackdropLayer(
-            layer = layer,
-            modifier = Modifier.fillMaxSize(),
-            blurRadiusPx = blurPx,
-            contentOffset = contentOffset,
-        )
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .draggable(
-                    state = dragState,
-                    orientation = Orientation.Horizontal,
-                    onDragStopped = {
-                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) }
-                    },
-                ),
-            shape = RoundedCornerShape(50),
-            color = Color(if (LocalResolvedDark.current) 0xFF121212 else 0xFFFAFAFA).copy(alpha = 0.4f),
-            shadowElevation = 8.dp,
-            tonalElevation = 2.dp,
-        ) {
-            BoxWithConstraints(Modifier.padding(6.dp).height(56.dp)) {
-                val density = LocalDensity.current
-                val barWidthPx = with(density) { maxWidth.toPx() }
-                val barHeight = maxHeight
-                val itemWidthPx = barWidthPx / tabs.size
-                val itemWidthDp = with(density) { itemWidthPx.toDp() }
-                // 滑块位置：跟随当前页与翻页偏移（拖动时实时跟手）
-                val pillCenter = (pagerState.currentPage + pagerState.currentPageOffsetFraction) * itemWidthPx
-                Box(
-                    Modifier
-                        .offset { IntOffset((pillCenter - itemWidthPx * 0.5f).roundToInt(), 0) }
-                        .width(itemWidthDp)
-                        .height(barHeight)
-                        .clip(RoundedCornerShape(42))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    tabs.forEachIndexed { index, tab ->
-                        val selected = index == pagerState.currentPage
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(barHeight)
-                                .clip(RoundedCornerShape(42))
-                                .clickable { onSelect(index) },
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = tab.label,
-                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
+    Surface(
+        modifier = modifier
+            .height(68.dp)
+            .draggable(
+                state = dragState,
+                orientation = Orientation.Horizontal,
+                onDragStopped = {
+                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) }
+                },
+            ),
+        shape = RoundedCornerShape(50),
+        color = Color(if (LocalResolvedDark.current) 0xFF121212 else 0xFFFAFAFA).copy(alpha = 0.4f),
+        shadowElevation = 8.dp,
+        tonalElevation = 2.dp,
+    ) {
+        BoxWithConstraints(Modifier.padding(6.dp)) {
+            val density = LocalDensity.current
+            val barWidthPx = with(density) { maxWidth.toPx() }
+            val barHeight = maxHeight
+            val itemWidthPx = barWidthPx / tabs.size
+            val itemWidthDp = with(density) { itemWidthPx.toDp() }
+            // 滑块位置：跟随当前页与翻页偏移（拖动时实时跟手）
+            val pillCenter = (pagerState.currentPage + pagerState.currentPageOffsetFraction) * itemWidthPx
+            Box(
+                Modifier
+                    .offset { IntOffset((pillCenter - itemWidthPx * 0.5f).roundToInt(), 0) }
+                    .width(itemWidthDp)
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(42))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                tabs.forEachIndexed { index, tab ->
+                    val selected = index == pagerState.currentPage
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(barHeight)
+                            .clip(RoundedCornerShape(42))
+                            .clickable { onSelect(index) },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = tab.label,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
             }
