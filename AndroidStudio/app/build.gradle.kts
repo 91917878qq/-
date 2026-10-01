@@ -23,6 +23,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 用 debug keystore 签名，保证 release APK 可直接安装（正式发布可换正式签名）
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
