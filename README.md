@@ -17,23 +17,9 @@
 - 崩溃日志：本地记录，可导出日志包反馈
 - 液态玻璃底部导航与玻璃模糊效果（模糊等级 0–2 可调）
 
-## Android Studio 工程（3.0.0，推荐）
+## 构建
 
-`AndroidStudio/` 为**可编译的 Gradle 工程**（Kotlin + Compose + Liquid Glass 液态玻璃），
-与下方 smali 版功能等价，可直接构建：
-
-```bash
-cd AndroidStudio
-echo "sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk" > local.properties
-gradle :app:assembleDebug
-# 产物: app/build/outputs/apk/debug/app-debug.apk
-```
-
-依赖：Kotlin 2.4.10 / AGP 9.3.2 / Compose 1.9.4 / io.github.kyant0:backdrop:2.0.1（Apache-2.0）。
-
-## 构建（smali 版）
-
-本仓库同时保留 apktool 解码工程（smali + 资源），使用 [apktool](https://ibotpeaches.github.io/Apktool/) 构建：
+本仓库为 apktool 解码工程（smali + 资源），使用 [apktool](https://ibotpeaches.github.io/Apktool/) 构建：
 
 ```bash
 # 回编译
