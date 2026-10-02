@@ -7,3 +7,8 @@ keystore/
 # 閫嗗悜鏉愭枡涓庡弬鑰冨畨瑁呭寘锛堟湰鍦颁繚鐣欙紝涓嶅叆搴擄級
 鍠靛柕鍔╂墜_閫嗗悜.zip
 鍠靛柕鍔╂墜2.3.*.apk
+# 构建产物（不入库）
+MiaoMiaoAssistant/build/
+**/build/
+*.idsig
+*.apk.idsig
